@@ -21,6 +21,8 @@ class HubTest {
   private var calls = 0
   private val hazardLog = mutableListOf<String>()
   private var hazardClips = 0
+  private val replies = mutableListOf<String>()
+  private val online = mutableListOf<Boolean>()
 
   /** Main.immediate-like: launch runs the body right away, as lifecycleScope does. */
   private fun hub(
@@ -38,6 +40,8 @@ class HubTest {
       now = { test.testScheduler.currentTime },
       yoloScan = yoloScan,
       playHazard = playHazard,
+      onReply = { mode, say, _ -> replies += "$mode:$say" },
+      onOnline = { online += it },
       logHazard = { src, label, _, _, status -> hazardLog += "$src $label ${status.wire}" },
   )
 
@@ -117,5 +121,18 @@ class HubTest {
     assertEquals(listOf("yolo umbrella spoken"), hazardLog)
     assertTrue(crashes.isEmpty())
     assertTrue("loop kept scanning", scans >= 5)
+  }
+
+  @Test fun describeReplyReportedToScreen() = TestScope().run {
+    val h = hub(this) { _, _ -> Reply("A door.", false, "a1", 0) }
+    h.onButton(1)
+    assertEquals(listOf("describe:A door."), replies)
+  }
+
+  @Test fun onlineFlagFollowsRequests() = TestScope().run {
+    var fail = true
+    val h = hub(this) { _, _ -> if (fail) throw IOException("down") else Reply("ok", false, null, 0) }
+    h.onButton(1); fail = false; h.onButton(1)
+    assertEquals(listOf(false, true), online)
   }
 }

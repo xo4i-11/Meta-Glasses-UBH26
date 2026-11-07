@@ -36,6 +36,10 @@ class Hub(
     private val logHazard: (String, String, Float?, Int, HazardStatus) -> Unit = { _, _, _, _, _ -> },
     /** Debug view hook: every YOLO pass with the warning it produced (null = none). */
     private val onYolo: (YoloScan, Det?, HazardStatus?) -> Unit = { _, _, _ -> },
+    /** A non-hazard reply that is being spoken: mode, text, press-to-speech latency ms. */
+    private val onReply: (String, String, Int) -> Unit = { _, _, _ -> },
+    /** Backend reachability: true after any successful request, false when one fails to connect. */
+    private val onOnline: (Boolean) -> Unit = {},
 ) {
   private val gate = Gate()
   private val offline = Throttle(30_000)
@@ -130,6 +134,7 @@ class Hub(
         } finally {
           if (mode == "ask") recording = false
         }
+        onOnline(true)
         if (mode == "hazard") {
           if (!reply.hazard) return@launch // nothing at head height
           // Server blanks `say` when its own per-clip cooldown hit; otherwise the phone's quiet period decides.
@@ -139,9 +144,11 @@ class Hub(
         }
         play(reply) {
           lastClientMs = (now() - t0).toInt()
+          if (mode != "hazard") onReply(mode, reply.say, lastClientMs ?: 0)
           onStatus("${reply.say}\n\n$mode: $lastClientMs ms (server ${reply.serverMs} ms)")
         }
       } catch (e: IOException) {
+        onOnline(false)
         if (offline.allow(now())) speakLocal(OFFLINE)
         onStatus("Backend unreachable: ${e.message}")
       } catch (e: CancellationException) {

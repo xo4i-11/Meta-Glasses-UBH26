@@ -31,6 +31,16 @@ class Backend(private val baseUrl: String, val secret: String) {
 
   fun audioUrl(id: String) = "$baseUrl/audio/$id"
 
+  /** True when the backend answers with the shared secret accepted. */
+  suspend fun ping(): Boolean = try {
+    withContext(Dispatchers.IO) {
+      http.newCall(Request.Builder().url("$baseUrl/hazards").header("X-Secret", secret).build()).execute().use { it.isSuccessful }
+    }
+  } catch (e: Exception) {
+    if (e is kotlinx.coroutines.CancellationException) throw e
+    false
+  }
+
   /** Log one hazard event for the dashboard timeline. Never throws: offline events are dropped. */
   suspend fun hazardEvent(source: String, label: String, confidence: Float?, latencyMs: Int, status: String) {
     try {

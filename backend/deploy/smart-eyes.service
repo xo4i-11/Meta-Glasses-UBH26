@@ -1,0 +1,12 @@
+[Unit]
+Description=Smart Eyes backend
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/smart-eyes/backend
+EnvironmentFile=/opt/smart-eyes/backend/.env
+ExecStart=/opt/smart-eyes/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

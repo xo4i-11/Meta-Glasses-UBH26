@@ -1,0 +1,4 @@
+# Replace smarteyes.example.com with the GoDaddy domain (A record -> Vultr IP).
+smarteyes.example.com {
+	reverse_proxy 127.0.0.1:8000
+}

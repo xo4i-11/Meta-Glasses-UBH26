@@ -25,8 +25,8 @@ android {
     versionName = "1.0"
     buildConfigField("String", "BACKEND_URL", "\"${local.getProperty("backend_url", "http://10.0.2.2:8000")}\"")
     buildConfigField("String", "SHARED_SECRET", "\"${local.getProperty("shared_secret", "")}\"")
-    manifestPlaceholders["mwdat_application_id"] = local.getProperty("mwdat_application_id", "")
-    manifestPlaceholders["mwdat_client_token"] = local.getProperty("mwdat_client_token", "")
+    manifestPlaceholders["mwdat_application_id"] = local.getProperty("mwdat_application_id", "0")
+    manifestPlaceholders["mwdat_client_token"] = local.getProperty("mwdat_client_token", "0")
   }
 
   androidResources { noCompress += "onnx" }

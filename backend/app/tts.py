@@ -8,7 +8,7 @@ MAX = 100
 
 def _client():
     from elevenlabs.client import ElevenLabs
-    return ElevenLabs(api_key=os.environ["ELEVEN_API_KEY"], timeout=4)  # phone read timeout is 15 s
+    return ElevenLabs(api_key=os.environ.get("ELEVENLABS_API_KEY") or os.environ["ELEVEN_API_KEY"], timeout=4)  # phone read timeout is 15 s
 
 
 def _put(audio_id: str, data: bytes) -> str:

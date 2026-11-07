@@ -14,7 +14,7 @@ def client(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     db.RECENT.clear()
     tts.STORE.clear()
-    monkeypatch.setattr(tts, "preload_hazard_clips", lambda: None, raising=False)
+    monkeypatch.setattr(tts, "preload_hazard_clips", lambda: tts.PINNED.update(hazard_stop=b"s", hazard_duck=b"d"))
     if hasattr(main, "COOLDOWN"):
         main.COOLDOWN.last.clear()
     with TestClient(main.app) as c:

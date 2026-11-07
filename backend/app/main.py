@@ -1,5 +1,6 @@
 import os
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -8,10 +9,12 @@ from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
 from app import db, gemini, tts
+from app.cooldown import Cooldown
 
 load_dotenv()
 
 SORRY = "Sorry, I couldn't see that."
+COOLDOWN = Cooldown(float(os.environ.get("HAZARD_COOLDOWN_S", "10")))
 
 
 def auth(request: Request):
@@ -21,7 +24,13 @@ def auth(request: Request):
         raise HTTPException(401, "bad secret")
 
 
-app = FastAPI(dependencies=[Depends(auth)])
+@asynccontextmanager
+async def lifespan(app):
+    await run_in_threadpool(tts.preload_hazard_clips)
+    yield
+
+
+app = FastAPI(dependencies=[Depends(auth)], lifespan=lifespan)
 
 
 @app.post("/frame")
@@ -40,7 +49,18 @@ async def frame(bg: BackgroundTasks,
         v = gemini.Vision(hazard=False, say="" if mode == "hazard" else SORRY, objects=[], caption="")
 
     say, audio_id = v.say, None
-    if say:
+    if mode == "hazard":
+        if not v.hazard:
+            say = ""
+        else:
+            clip = "hazard_duck" if "duck" in say.lower() else "hazard_stop"
+            if not COOLDOWN.allow(clip, time.monotonic()):
+                say = ""
+            elif tts.get(clip) is not None:
+                audio_id = clip
+            else:
+                audio_id = await run_in_threadpool(tts.speak, say)
+    elif say:
         audio_id = await run_in_threadpool(tts.speak, say)
 
     server_ms = int((time.monotonic() - t0) * 1000)

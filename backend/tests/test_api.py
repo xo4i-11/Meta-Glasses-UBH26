@@ -57,3 +57,27 @@ def test_frame_logs_event(client, fake_vision, fake_speak):
     post_frame(client, "describe", client_ms="2400")
     ev = db.RECENT[-1]
     assert ev["mode"] == "describe" and ev["objects"] == ["door on right"] and ev["latency_ms"] == 2400
+
+
+def test_hazard_none_is_silent(client, fake_vision):
+    fake_vision(Vision(hazard=False, say="Chair ahead", objects=[], caption=""))
+    r = post_frame(client, "hazard")
+    assert r["audio_id"] is None and r["say"] == "" and r["hazard"] is False
+
+
+def test_hazard_uses_cached_clip(client, fake_vision):
+    fake_vision(Vision(hazard=True, say="Duck, branch ahead", objects=[], caption=""))
+    r = post_frame(client, "hazard")
+    assert r["audio_id"] == "hazard_duck" and r["hazard"] is True
+
+
+def test_hazard_stop_clip_default(client, fake_vision):
+    fake_vision(Vision(hazard=True, say="Stop, sign ahead", objects=[], caption=""))
+    assert post_frame(client, "hazard")["audio_id"] == "hazard_stop"
+
+
+def test_hazard_cooldown(client, fake_vision):
+    fake_vision(Vision(hazard=True, say="Stop, head height", objects=[], caption=""))
+    assert post_frame(client, "hazard")["audio_id"] == "hazard_stop"
+    second = post_frame(client, "hazard")
+    assert second["audio_id"] is None and second["say"] == ""  # within 10 s

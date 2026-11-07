@@ -34,4 +34,18 @@ def speak(text: str) -> str | None:
 
 
 def get(audio_id: str) -> bytes | None:
-    return STORE.get(audio_id)
+    return PINNED.get(audio_id) or STORE.get(audio_id)
+
+
+HAZARD_CLIPS = {"hazard_stop": "Stop, head height", "hazard_duck": "Duck, head height"}
+
+
+def preload_hazard_clips() -> None:
+    for audio_id, text in HAZARD_CLIPS.items():
+        try:
+            PINNED[audio_id] = _synth(text)  # pinned: never evicted from the LRU store
+        except Exception as e:
+            print("hazard clip preload failed:", audio_id, e)
+
+
+PINNED: dict[str, bytes] = {}

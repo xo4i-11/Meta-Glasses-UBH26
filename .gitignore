@@ -1,0 +1,11 @@
+.env
+__pycache__/
+.pytest_cache/
+.venv/
+.superpowers/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.iml

@@ -2,7 +2,6 @@ package com.smarteyes
 
 import android.Manifest
 import android.os.Bundle
-import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.TypedValue
@@ -16,10 +15,7 @@ import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationState
-import java.io.IOException
 import kotlinx.coroutines.launch
-
-const val OFFLINE = "Connection lost, the cane is still active."
 
 class MainActivity : ComponentActivity() {
   private val backend by lazy { Backend(BuildConfig.BACKEND_URL, BuildConfig.SHARED_SECRET) }
@@ -29,7 +25,7 @@ class MainActivity : ComponentActivity() {
   private lateinit var source: FrameSource
   private lateinit var status: TextView
   private lateinit var sourceBtn: Button
-  private var lastClientMs: Int? = null
+  private lateinit var hub: Hub
   private var datReady = false
 
   private val perms = registerForActivityResult(RequestMultiplePermissions()) {
@@ -48,11 +44,16 @@ class MainActivity : ComponentActivity() {
     phone = PhoneFrameSource(this)
     glasses = GlassesFrameSource(lifecycleScope, ::setStatus)
     source = phone
+    hub = Hub(lifecycleScope, { source }, backend, player, ::setStatus, ::vibrate)
     val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 96, 48, 48) }
     status = TextView(this).apply { setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f); text = "Ready" }
     root.addView(status)
-    root.addView(button("Describe") { onButton(1) })
-    root.addView(button("Read text") { onButton(2) })
+    root.addView(button("Describe") { hub.onButton(1) })
+    root.addView(button("Read text") { hub.onButton(2) })
+    root.addView(button("Hazard warnings: off") {
+      if (hub.hazardsOn) hub.stopHazards() else hub.startHazards()
+      (it as Button).text = if (hub.hazardsOn) "Hazard warnings: on" else "Hazard warnings: off"
+    })
     sourceBtn = button("Camera: phone. Tap to connect glasses") { toggleSource() }
     root.addView(sourceBtn)
     setContentView(root)
@@ -85,33 +86,16 @@ class MainActivity : ComponentActivity() {
     sourceBtn.text = "Camera: glasses. Tap for phone"
   }
 
-  private fun button(label: String, onClick: () -> Unit) = Button(this).apply {
+  private fun button(label: String, onClick: (android.view.View) -> Unit) = Button(this).apply {
     text = label
     contentDescription = label
     setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
     minHeight = 220
-    setOnClickListener { onClick() }
+    setOnClickListener { onClick(it) }
   }
 
-  /** event: 1 PRESS (describe), 2 HOLD (read text) — same values as the cane BLE contract. */
-  private fun onButton(event: Int) {
-    val mode = if (event == 2) "read_text" else "describe"
-    getSystemService(Vibrator::class.java).vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
-    val t0 = SystemClock.elapsedRealtime()
-    lifecycleScope.launch {
-      val jpeg = source.latestJpeg() ?: return@launch setStatus("No camera frame")
-      try {
-        val reply = backend.frame(jpeg, mode, lastClientMs)
-        player.play(reply, backend) {
-          lastClientMs = (SystemClock.elapsedRealtime() - t0).toInt()
-          setStatus("${reply.say}\n\n$mode: ${lastClientMs} ms (server ${reply.serverMs} ms)")
-        }
-      } catch (e: IOException) {
-        player.speakLocal(OFFLINE)
-        setStatus("Backend unreachable: ${e.message}")
-      }
-    }
-  }
+  private fun vibrate() =
+      getSystemService(Vibrator::class.java).vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
 
   private fun setStatus(s: String) = runOnUiThread { status.text = s }
 }

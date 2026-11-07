@@ -26,6 +26,8 @@ object LP {
   const val SMALL = 13f
   const val BODY = 20f
   const val BIG = 31f
+  /** The one exception to the three-step scale: the full-screen hazard flash. */
+  const val HAZARD = 50f
 
   const val STROKE = 3 // dp
 }
@@ -81,7 +83,7 @@ class StatusChip(context: Context, private val name: String) : LinearLayout(cont
     connected = on
     stateText = text
     state.text = text
-    background = context.lpShape(if (on) LP.INK else LP.YELLOW, 14)
+    background = context.lpShape(if (on) LP.INK else LP.YELLOW, 20)
     title.setTextColor(if (on) LP.YELLOW else LP.INK)
     state.setTextColor(if (on) LP.YELLOW else LP.INK)
     contentDescription = "$name, $text"
@@ -119,7 +121,7 @@ class GuidancePill(context: Context, private val onToggle: (Boolean) -> Unit) : 
     title.text = if (on) "Guidance on" else "Guidance off"
     sub.text = if (on) "Watching for head height" else "Tap to start"
     title.setTextColor(if (on) LP.YELLOW else LP.INK)
-    sub.setTextColor(if (on) LP.PAGE else LP.INK)
+    sub.setTextColor(if (on) LP.YELLOW else LP.INK)
     knob.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(if (on) LP.YELLOW else LP.INK) }
     removeAllViews()
     val k = LayoutParams(context.dp(68), context.dp(68))
@@ -137,26 +139,50 @@ class GuidancePill(context: Context, private val onToggle: (Boolean) -> Unit) : 
   }
 }
 
-/** Describe / Read / Ask: a big white tile with the matching cane gesture under the label. */
+/** The cane button gesture drawn as marks: press = one dot, hold = one long bar, double press = two dots. */
+class GestureMarks(context: Context, private val gesture: String) : View(context) {
+  private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+  var color = LP.INK
+    set(v) { field = v; invalidate() }
+
+  override fun onDraw(c: android.graphics.Canvas) {
+    paint.color = color
+    val r = context.dp(9).toFloat()
+    val y = height / 2f
+    when (gesture) {
+      "hold" -> c.drawRoundRect(r, y - r, r + context.dp(64), y + r, r, r, paint)
+      "twice" -> { c.drawCircle(r * 2, y, r, paint); c.drawCircle(r * 5, y, r, paint) }
+      else -> c.drawCircle(r * 2, y, r, paint)
+    }
+  }
+}
+
+/** Describe / Read / Ask: a big white tile; the matching cane gesture is drawn above the label. */
 class ActionTile(context: Context, label: String, gesture: String, onTap: () -> Unit) : LinearLayout(context) {
+  private val marks = GestureMarks(context, gesture)
+
   init {
     orientation = VERTICAL
     gravity = Gravity.BOTTOM or Gravity.START
     setPadding(context.dp(12), context.dp(12), context.dp(10), context.dp(12))
-    minimumHeight = context.dp(118)
+    minimumHeight = context.dp(72)
     isClickable = true
     isFocusable = true
-    val pressed = context.lpShape(LP.INK, 20)
-    val normal = context.lpShape(LP.PAGE, 20)
     background = StateListDrawable().apply {
-      addState(intArrayOf(android.R.attr.state_pressed), pressed)
-      addState(intArrayOf(), normal)
+      addState(intArrayOf(android.R.attr.state_pressed), context.lpShape(LP.INK, 20))
+      addState(intArrayOf(), context.lpShape(LP.PAGE, 20))
     }
     val colors = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_pressed), intArrayOf()), intArrayOf(LP.YELLOW, LP.INK))
+    addView(marks, LayoutParams(-1, context.dp(28)).apply { bottomMargin = context.dp(6) })
     addView(context.lpText(LP.BODY, bold = true).apply { text = label; setTextColor(colors); isDuplicateParentStateEnabled = true })
-    addView(context.lpText(LP.SMALL).apply { text = gesture; setTextColor(colors); isDuplicateParentStateEnabled = true })
-    contentDescription = "$label. On the cane: $gesture."
+    addView(context.lpText(LP.SMALL).apply { text = "cane: $gesture"; setTextColor(colors); isDuplicateParentStateEnabled = true })
+    contentDescription = "$label. On the cane: ${if (gesture == "twice") "double press" else gesture}."
     setOnClickListener { haptic(); onTap() }
+  }
+
+  override fun drawableStateChanged() {
+    super.drawableStateChanged()
+    marks.color = if (isPressed) LP.YELLOW else LP.INK
   }
 }
 
@@ -168,10 +194,22 @@ fun Context.lpPill(label: String, onTap: (View) -> Unit) = lpText(LP.BODY, bold 
   minHeight = dp(64)
   setPadding(dp(20), 0, dp(20), 0)
   background = StateListDrawable().apply {
-    addState(intArrayOf(android.R.attr.state_pressed), lpShape(LP.INK, 32))
-    addState(intArrayOf(), lpShape(LP.YELLOW, 32))
+    addState(intArrayOf(android.R.attr.state_pressed), lpShape(LP.INK, 48))
+    addState(intArrayOf(), lpShape(LP.YELLOW, 48))
   }
   setTextColor(ColorStateList(arrayOf(intArrayOf(android.R.attr.state_pressed), intArrayOf()), intArrayOf(LP.YELLOW, LP.INK)))
   isClickable = true
   setOnClickListener { haptic(); onTap(it) }
+}
+
+/** Makes a pill read as a switch to TalkBack, with its on/off state. */
+fun View.asSwitch(isOn: () -> Boolean) {
+  accessibilityDelegate = object : View.AccessibilityDelegate() {
+    override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
+      super.onInitializeAccessibilityNodeInfo(host, info)
+      info.className = android.widget.Switch::class.java.name
+      info.isCheckable = true
+      info.isChecked = isOn()
+    }
+  }
 }

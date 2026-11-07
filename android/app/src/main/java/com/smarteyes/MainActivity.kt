@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
   private lateinit var details: TextView
   private lateinit var debug: DebugView
   private lateinit var hazardFlash: TextView
+  private lateinit var pageScroll: ScrollView
   private var lastSaidAt = 0L
   private var lastSaidSource = ""
   private var flashJob: Job? = null
@@ -131,116 +132,148 @@ class MainActivity : ComponentActivity() {
   // ---------------------------------------------------------------- layout
 
   private fun buildScreen(): View {
-    val gap = dp(12)
-    val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), 0, dp(16), dp(24)) }
-    fun add(v: View, top: Int = gap, h: Int = -2) = col.addView(v, LinearLayout.LayoutParams(-1, h).apply { topMargin = top })
+    // Large-print users run big system font sizes: stack rows instead of squeezing three across.
+    val scale = resources.configuration.fontScale
+    val stackTiles = scale >= 1.3f
+    val stackChips = scale >= 1.5f
 
-    offlineBanner = lpText(LP.BODY, bold = true, color = LP.YELLOW).apply {
-      text = "Server offline. Warnings still work."
-      setPadding(dp(16), dp(14), dp(16), dp(14))
-      background = lpShape(LP.INK, 14)
-      visibility = View.GONE
-      accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-    }
-    add(offlineBanner, top = 0)
-
+    // Top: status chips.
     glassesChip = StatusChip(this, "Glasses")
     caneChip = StatusChip(this, "Cane")
     serverChip = StatusChip(this, "Server")
-    val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-    listOf(glassesChip, caneChip, serverChip).forEachIndexed { i, c ->
-      chips.addView(c, LinearLayout.LayoutParams(0, -1, 1f).apply { if (i > 0) marginStart = dp(8) }) // equal heights
-    }
-    add(chips)
-    chip(glassesChip, false, "phone camera")
+    val chips = row(stackChips, listOf(glassesChip, caneChip, serverChip), gap = dp(8))
+    chip(glassesChip, false, "not in use")
     chip(caneChip, false, "off")
     chip(serverChip, false, "checking")
 
-    // The page: what Smart Eyes last said, in large print. Bound edge left, fore edge right.
+    // Middle: the page, what Smart Eyes last said, in large print. It scrolls on its own so a long answer
+    // never moves the controls below it. Bound edge left, fore edge right.
     said = lpText(LP.BIG, bold = true).apply { text = "Press Describe, or turn on Guidance." }
     saidMeta = lpText(LP.SMALL).apply { text = "Nothing said yet" }
     val page = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
       setPadding(dp(20), dp(20), dp(20), dp(18))
-      minimumHeight = dp(196)
       background = lpShape(LP.PAGE, 6, 24, 24, 6)
       addView(said)
       addView(saidMeta, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(14) })
       importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
     }
-    add(page, top = dp(16))
+    helperPill = lpPill("Helper tools") { openHelper() }
+    val middle = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      addView(page, LinearLayout.LayoutParams(-1, -2))
+      addView(helperPill, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+    }
+    pageScroll = ScrollView(this).apply { addView(middle); isVerticalScrollBarEnabled = false; clipToPadding = false }
 
+    // The offline banner overlays the top of the page area instead of pushing anything down.
+    offlineBanner = lpText(LP.BODY, bold = true, color = LP.YELLOW).apply {
+      text = "Server offline. Warnings still work."
+      setPadding(dp(16), dp(14), dp(16), dp(14))
+      background = lpShape(LP.INK, 20)
+      visibility = View.GONE
+      accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+    }
+    val middleFrame = FrameLayout(this).apply {
+      addView(pageScroll, FrameLayout.LayoutParams(-1, -1))
+      addView(offlineBanner, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+    }
+
+    // Bottom: the controls, always in the same place above the navigation bar.
     guidance = GuidancePill(this) { on ->
       if (on) hub.startHazards() else hub.stopHazards()
-      player.speakLocal(if (on) "Guidance on." else "Guidance off.")
-      announce(if (on) "Guidance on" else "Guidance off")
+      player.speakLocal(if (on) "Guidance on." else "Guidance off.") // TalkBack already reads the switch state
     }
-    add(guidance, top = dp(20))
-
-    val tiles = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-    listOf(
+    val tiles = row(stackTiles, listOf(
         ActionTile(this, "Describe", "press") { hub.onButton(1) },
         ActionTile(this, "Read", "hold") { hub.onButton(2) },
-        ActionTile(this, "Ask", "double press") { hub.onButton(3) },
-    ).forEachIndexed { i, t -> tiles.addView(t, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) marginStart = dp(10) }) }
-    add(tiles, top = dp(16))
+        ActionTile(this, "Ask", "twice") { hub.onButton(3) },
+    ), gap = dp(10))
+    if (!stackTiles) for (i in 0 until tiles.childCount) tiles.getChildAt(i).minimumHeight = dp(118)
 
-    // Helper tools: for the sighted helper. Collapsed by default so the blind user's swipe order stays short.
-    helperPill = lpPill("Helper tools") { toggleHelper() }
-    add(helperPill, top = dp(28), h = -2)
-    helper = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+    val col = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setPadding(dp(16), dp(12), dp(16), dp(16))
+      addView(chips, LinearLayout.LayoutParams(-1, -2))
+      addView(middleFrame, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(16) })
+      addView(guidance, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+      addView(tiles, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+    }
+
+    // Helper tools live in a bottom sheet (built once, opened on demand).
     sourcePill = lpPill("Camera: phone. Tap for glasses") { toggleSource() }
     debugPill = lpPill("Tuning view: off") {
       debug.visibility = if (debug.visibility == View.VISIBLE) View.GONE else View.VISIBLE
       setPill(debugPill, if (debug.visibility == View.VISIBLE) "Tuning view: on" else "Tuning view: off")
-    }
+    }.apply { asSwitch { debug.visibility == View.VISIBLE } }
     details = lpText(LP.SMALL).apply { text = "Ready." }
     debug = DebugView(this).apply { visibility = View.GONE }
-    helper.addView(sourcePill, LinearLayout.LayoutParams(-1, -2).apply { topMargin = gap })
-    helper.addView(debugPill, LinearLayout.LayoutParams(-1, -2).apply { topMargin = gap })
-    helper.addView(details, LinearLayout.LayoutParams(-1, -2).apply { topMargin = gap })
-    helper.addView(debug, LinearLayout.LayoutParams(-1, -2).apply { topMargin = gap })
-    add(helper, top = 0)
-
-    val scroll = ScrollView(this).apply { addView(col); isFillViewport = true }
+    helper = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setPadding(dp(16), dp(20), dp(16), dp(24))
+      addView(lpText(LP.BODY, bold = true).apply { text = "Helper tools"; isFocusable = true })
+      addView(sourcePill, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+      addView(debugPill, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+      addView(details, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+      addView(debug, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+    }
 
     // Hazard flash: the whole screen turns black with yellow type, held briefly. Audio carries the warning;
-    // this is for anyone looking (helper, judges, low-vision user).
+    // this is for anyone looking (helper, judges, low-vision user). Hazard-state exception to the type scale.
     hazardFlash = lpText(LP.BIG, bold = true, color = LP.YELLOW).apply {
       text = "Stop.\nHead height."
       gravity = Gravity.CENTER
       setBackgroundColor(LP.INK)
       visibility = View.GONE
       importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-      setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, LP.BIG * 1.6f)
+      setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, LP.HAZARD)
     }
 
+    // At very large font sizes the controls cannot all fit above the fold: the whole screen scrolls instead,
+    // keeping the same order (status, page, guidance, actions).
+    val body: View = if (stackChips) {
+      (middleFrame.layoutParams as LinearLayout.LayoutParams).apply { height = -2; weight = 0f }
+      ScrollView(this).apply { addView(col) }
+    } else col
     val root = FrameLayout(this).apply {
       setBackgroundColor(LP.YELLOW)
-      addView(scroll, FrameLayout.LayoutParams(-1, -1))
+      addView(body, FrameLayout.LayoutParams(-1, -1))
       addView(hazardFlash, FrameLayout.LayoutParams(-1, -1))
     }
     ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
       val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-      // Content scrolls below the status bar, never under it; the yellow board shows through behind the bars.
-      (scroll.layoutParams as FrameLayout.LayoutParams).setMargins(0, bars.top, 0, 0)
-      scroll.setPadding(0, dp(12), 0, bars.bottom)
-      scroll.clipToPadding = false
-      scroll.requestLayout()
+      (body.layoutParams as FrameLayout.LayoutParams).setMargins(0, bars.top, 0, bars.bottom)
+      body.requestLayout()
       insets
     }
     return root
   }
 
+  /** Three items across, or stacked full width when the font scale is large. */
+  private fun row(stack: Boolean, items: List<View>, gap: Int) = LinearLayout(this).apply {
+    orientation = if (stack) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+    items.forEachIndexed { i, v ->
+      addView(v, if (stack) LinearLayout.LayoutParams(-1, -2).apply { if (i > 0) topMargin = gap }
+                 else LinearLayout.LayoutParams(0, -1, 1f).apply { if (i > 0) marginStart = gap })
+    }
+  }
+
+  private fun openHelper() {
+    (helper.parent as? android.view.ViewGroup)?.removeView(helper)
+    android.app.Dialog(this).apply {
+      setContentView(ScrollView(this@MainActivity).apply { addView(helper) })
+      window?.apply {
+        setBackgroundDrawable(lpShape(LP.YELLOW, 28, 28, 0, 0))
+        setGravity(Gravity.BOTTOM)
+        setLayout(-1, -2)
+      }
+      show()
+    }
+  }
+
   private fun setPill(pill: TextView, label: String) {
     pill.text = label
     pill.contentDescription = label
-  }
-
-  private fun toggleHelper() {
-    val open = helper.visibility != View.VISIBLE
-    helper.visibility = if (open) View.VISIBLE else View.GONE
-    helperPill.stateDescription = if (open) "Expanded" else "Collapsed"
   }
 
   // ---------------------------------------------------------------- state
@@ -273,8 +306,10 @@ class MainActivity : ComponentActivity() {
   }
 
   private fun setOnline(online: Boolean) {
-    chip(serverChip, online, if (online) "online" else "offline", speak = true)
+    chip(serverChip, online, if (online) "online" else "offline", speak = online) // offline: the banner speaks
     offlineBanner.visibility = if (online) View.GONE else View.VISIBLE
+    // The page slides below the banner; the controls at the bottom never move.
+    offlineBanner.post { pageScroll.setPadding(0, if (online) 0 else offlineBanner.height + dp(12), 0, 0) }
   }
 
   private fun showSaid(mode: String, text: String, ms: Int) {
@@ -307,7 +342,7 @@ class MainActivity : ComponentActivity() {
       glasses.stop()
       source = phone
       setPill(sourcePill, "Camera: phone. Tap for glasses")
-      chip(glassesChip, false, "phone camera", speak = true)
+      chip(glassesChip, false, "not in use", speak = true)
       return
     }
     lifecycleScope.launch {

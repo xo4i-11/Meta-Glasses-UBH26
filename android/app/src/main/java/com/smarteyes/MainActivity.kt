@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
   private var datReady = false
   @Volatile private var yolo: Yolo? = null
   @Volatile private var lastYoloFrame: Bitmap? = null
+  private lateinit var debug: DebugView
 
   private val perms = registerForActivityResult(RequestMultiplePermissions()) { granted ->
     Wearables.initialize(this)
@@ -97,7 +98,13 @@ class MainActivity : ComponentActivity() {
     })
     sourceBtn = button("Camera: phone. Tap to connect glasses") { toggleSource() }
     root.addView(sourceBtn)
-    setContentView(root)
+    debug = DebugView(this).apply { visibility = android.view.View.GONE }
+    root.addView(button("Debug view: off") {
+      debug.visibility = if (debug.visibility == android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE
+      (it as Button).text = if (debug.visibility == android.view.View.VISIBLE) "Debug view: on" else "Debug view: off"
+    })
+    root.addView(debug)
+    setContentView(android.widget.ScrollView(this).apply { addView(root) })
     perms.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.RECORD_AUDIO))
   }
 
@@ -150,8 +157,9 @@ class MainActivity : ComponentActivity() {
     YoloScan(y.detect(bmp), (SystemClock.elapsedRealtime() - t0).toInt())
   }
 
-  /** Hook for the debug view (Task 6). */
-  private fun onYoloResult(scan: YoloScan, warn: Det?, status: HazardStatus?) = Unit
+  private fun onYoloResult(scan: YoloScan, warn: Det?, status: HazardStatus?) {
+    if (debug.visibility == android.view.View.VISIBLE) debug.show(lastYoloFrame, scan, warn, status)
+  }
 
   private fun vibrate() =
       getSystemService(Vibrator::class.java).vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))

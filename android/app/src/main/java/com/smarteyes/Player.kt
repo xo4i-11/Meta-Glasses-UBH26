@@ -35,11 +35,36 @@ class Player(context: Context) {
     }
   }
 
+  private val hazardClip = java.io.File(ctx.cacheDir, "hazard_stop.mp3")
+
+  /** Fetch the ElevenLabs "Stop, head height" clip once so YOLO warnings use the same voice offline. */
+  suspend fun cacheHazardClip(backend: Backend) {
+    if (!hazardClip.exists() || hazardClip.length() == 0L) backend.download("hazard_stop", hazardClip)
+  }
+
+  /** YOLO head-height warning: interrupts whatever is playing. Cached clip, else Android TTS. */
+  fun playHazard() {
+    stop()
+    if (hazardClip.length() == 0L) return speakLocal("Careful, head height.")
+    mp = MediaPlayer().apply {
+      setAudioAttributes(AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_MEDIA)
+          .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+          .build())
+      setDataSource(hazardClip.path)
+      setOnErrorListener { _, _, _ -> speakLocal("Careful, head height."); true }
+      setOnCompletionListener { it.release(); if (mp === it) mp = null }
+      prepare()
+      start()
+    }
+  }
+
   fun speakLocal(text: String) {
     tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "smarteyes")
   }
 
   fun stop() {
+    tts.stop()
     mp?.release()
     mp = null
   }

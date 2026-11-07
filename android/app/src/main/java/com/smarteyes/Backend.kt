@@ -31,6 +31,32 @@ class Backend(private val baseUrl: String, val secret: String) {
 
   fun audioUrl(id: String) = "$baseUrl/audio/$id"
 
+  /** Log one hazard event for the dashboard timeline. Never throws: offline events are dropped. */
+  suspend fun hazardEvent(source: String, label: String, confidence: Float?, latencyMs: Int, status: String) {
+    try {
+      withContext(Dispatchers.IO) {
+        val json = JSONObject().put("source", source).put("label", label)
+            .put("confidence", confidence ?: JSONObject.NULL).put("latency_ms", latencyMs).put("status", status)
+        val req = Request.Builder().url("$baseUrl/hazard_event").header("X-Secret", secret)
+            .post(json.toString().toRequestBody("application/json".toMediaType())).build()
+        http.newCall(req).execute().close()
+      }
+    } catch (e: Exception) {
+      if (e is kotlinx.coroutines.CancellationException) throw e
+    }
+  }
+
+  /** Downloads one audio clip (e.g. the pre-made hazard warning) to `dest`. Returns false on any failure. */
+  suspend fun download(id: String, dest: java.io.File): Boolean = try {
+    withContext(Dispatchers.IO) {
+      val req = Request.Builder().url(audioUrl(id)).header("X-Secret", secret).build()
+      http.newCall(req).execute().use { r -> r.isSuccessful && r.body!!.bytes().also { dest.writeBytes(it) }.isNotEmpty() }
+    }
+  } catch (e: Exception) {
+    if (e is kotlinx.coroutines.CancellationException) throw e
+    false
+  }
+
   private fun multipart(clientMs: Int?) = MultipartBody.Builder().setType(MultipartBody.FORM).also {
     if (clientMs != null) it.addFormDataPart("client_ms", clientMs.toString())
   }

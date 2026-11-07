@@ -1,7 +1,10 @@
 package com.smarteyes
 
 import android.Manifest
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.TypedValue
@@ -15,8 +18,10 @@ import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
   private val backend by lazy { Backend(BuildConfig.BACKEND_URL, BuildConfig.SHARED_SECRET) }
@@ -30,6 +35,8 @@ class MainActivity : ComponentActivity() {
   private lateinit var cane: CaneBle
   private lateinit var caneStatus: TextView
   private var datReady = false
+  @Volatile private var yolo: Yolo? = null
+  @Volatile private var lastYoloFrame: Bitmap? = null
 
   private val perms = registerForActivityResult(RequestMultiplePermissions()) { granted ->
     Wearables.initialize(this)
@@ -66,7 +73,15 @@ class MainActivity : ComponentActivity() {
         speakLocal = player::speakLocal,
         onStatus = ::setStatus,
         buzz = ::vibrate,
+        yoloScan = ::scanYolo,
+        playHazard = player::playHazard,
+        logHazard = { src, label, conf, ms, st -> lifecycleScope.launch { backend.hazardEvent(src, label, conf, ms, st.wire) } },
+        onYolo = { scan, warn, st -> onYoloResult(scan, warn, st) },
     )
+    lifecycleScope.launch(Dispatchers.Default) {
+      yolo = try { Yolo(this@MainActivity) } catch (e: Exception) { setStatus("YOLO failed to load: ${e.message}"); null }
+    }
+    lifecycleScope.launch { player.cacheHazardClip(backend) }
     cane = CaneBle(this, hub::onButton) { s -> runOnUiThread { caneStatus.text = s } }
     val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 96, 48, 48) }
     status = TextView(this).apply { setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f); text = "Ready" }
@@ -101,7 +116,7 @@ class MainActivity : ComponentActivity() {
     }
     lifecycleScope.launch {
       if (Wearables.registrationState.value != RegistrationState.REGISTERED) {
-        setStatus("Registering with Meta AI app… tap again when done")
+        setStatus("Registering with Meta AI app... tap again when done")
         Wearables.startRegistration(this@MainActivity)
         return@launch
       }
@@ -124,6 +139,19 @@ class MainActivity : ComponentActivity() {
     minHeight = 220
     setOnClickListener { onClick(it) }
   }
+
+  /** One YOLO pass on the newest frame, off the main thread. Null when the model or a frame isn't ready. */
+  private suspend fun scanYolo(): YoloScan? = withContext(Dispatchers.Default) {
+    val y = yolo ?: return@withContext null
+    val t0 = SystemClock.elapsedRealtime()
+    val jpeg = source.latestJpeg() ?: return@withContext null
+    val bmp = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) ?: return@withContext null
+    lastYoloFrame = bmp
+    YoloScan(y.detect(bmp), (SystemClock.elapsedRealtime() - t0).toInt())
+  }
+
+  /** Hook for the debug view (Task 6). */
+  private fun onYoloResult(scan: YoloScan, warn: Det?, status: HazardStatus?) = Unit
 
   private fun vibrate() =
       getSystemService(Vibrator::class.java).vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))

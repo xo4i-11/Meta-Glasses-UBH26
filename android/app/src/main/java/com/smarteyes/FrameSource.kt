@@ -116,10 +116,12 @@ class GlassesFrameSource(private val scope: CoroutineScope, private val onStatus
           session = s
           jobs += scope.launch { s.errors.collect { onStatus("Glasses error: ${it.description}") } }
           jobs += scope.launch {
+            var started = false // state may replay STOPPED before start(); only tear down after a real start
             s.state.collect { st ->
               onStatus("Glasses: $st")
+              if (st == DeviceSessionState.STARTED) started = true
               if (st == DeviceSessionState.STARTED && camera == null) addCamera(s)
-              if (st == DeviceSessionState.STOPPED) stop()
+              if (st == DeviceSessionState.STOPPED && started) stop()
             }
           }
           s.start()

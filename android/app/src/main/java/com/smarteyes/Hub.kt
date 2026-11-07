@@ -2,7 +2,9 @@ package com.smarteyes
 
 import android.os.SystemClock
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -15,12 +17,13 @@ const val OFFLINE = "Connection lost, the cane is still active."
 /** Hazard loop + button handling. `scope` must be main-thread (Activity lifecycleScope). */
 class Hub(
     private val scope: CoroutineScope,
-    private val source: () -> FrameSource,
-    private val backend: Backend,
-    private val player: Player,
+    /** Sends one request for `mode`; null means no camera frame was available. */
+    private val request: suspend (mode: String, clientMs: Int?) -> Reply?,
+    private val play: (Reply, onStarted: () -> Unit) -> Unit,
+    private val speakLocal: (String) -> Unit,
     private val onStatus: (String) -> Unit,
     private val buzz: () -> Unit,
-    private val recordQuestion: suspend () -> ByteArray?,
+    private val now: () -> Long = SystemClock::elapsedRealtime,
     private val cadenceMs: Long = 4000,
 ) {
   private val gate = Gate()
@@ -64,30 +67,31 @@ class Hub(
   }
 
   private fun run(mode: String) {
-    val t0 = SystemClock.elapsedRealtime()
-    inFlight = scope.launch {
+    val t0 = now()
+    // LAZY + assign before start: on Main.immediate the body may finish synchronously, and the
+    // finally below must already see this job as inFlight or the gate never frees.
+    val job = scope.launch(start = CoroutineStart.LAZY) {
       try {
-        val reply = if (mode == "ask") {
-          player.speakLocal("Listening")
-          delay(800)
-          // Empty audio -> backend falls back to "where are my keys?"
-          backend.ask(recordQuestion() ?: ByteArray(0), "question.m4a", lastClientMs)
-        } else {
-          val jpeg = source().latestJpeg() ?: return@launch onStatus("No camera frame")
-          backend.frame(jpeg, mode, lastClientMs)
-        }
-        if (mode == "hazard" && reply.audioId == null) return@launch // nothing at head height: stay silent
-        player.play(reply, backend) {
-          lastClientMs = (SystemClock.elapsedRealtime() - t0).toInt()
+        val reply = request(mode, lastClientMs) ?: return@launch onStatus("No camera frame")
+        // Server blanks `say` for no-hazard and cooldown; say without audio (TTS down) still gets spoken locally.
+        if (mode == "hazard" && reply.say.isEmpty()) return@launch
+        play(reply) {
+          lastClientMs = (now() - t0).toInt()
           onStatus("${reply.say}\n\n$mode: $lastClientMs ms (server ${reply.serverMs} ms)")
         }
       } catch (e: IOException) {
-        if (offline.allow(SystemClock.elapsedRealtime())) player.speakLocal(OFFLINE)
+        if (offline.allow(now())) speakLocal(OFFLINE)
         onStatus("Backend unreachable: ${e.message}")
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) { // bad JSON (captive portal), bitmap decode, camera errors: never crash the app
+        onStatus("Error: ${e.message}")
       } finally {
         // A pre-empted hazard job must not free the gate the button now holds.
         if (inFlight === currentCoroutineContext().job) gate.done()
       }
     }
+    inFlight = job
+    job.start()
   }
 }

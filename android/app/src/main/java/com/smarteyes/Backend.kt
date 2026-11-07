@@ -17,7 +17,7 @@ data class Reply(val say: String, val hazard: Boolean, val audioId: String?, val
 class Backend(private val baseUrl: String, val secret: String) {
   private val http = OkHttpClient.Builder()
       .connectTimeout(3, TimeUnit.SECONDS)
-      .readTimeout(10, TimeUnit.SECONDS)
+      .readTimeout(15, TimeUnit.SECONDS) // /ask chains STT + Gemini + TTS
       .build()
 
   suspend fun frame(jpeg: ByteArray, mode: String, clientMs: Int?): Reply =

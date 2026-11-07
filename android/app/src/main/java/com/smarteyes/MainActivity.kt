@@ -15,6 +15,7 @@ import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -49,7 +50,23 @@ class MainActivity : ComponentActivity() {
     glasses = GlassesFrameSource(lifecycleScope, ::setStatus)
     source = phone
     val recorder = VoiceRecorder(this)
-    hub = Hub(lifecycleScope, { source }, backend, player, ::setStatus, ::vibrate, recorder::record4s)
+    hub = Hub(
+        scope = lifecycleScope,
+        request = { mode, clientMs ->
+          if (mode == "ask") {
+            player.speakLocal("Listening")
+            delay(800)
+            // Empty audio -> backend falls back to "where are my keys?"
+            backend.ask(recorder.record4s() ?: ByteArray(0), "question.m4a", clientMs)
+          } else {
+            source.latestJpeg()?.let { backend.frame(it, mode, clientMs) }
+          }
+        },
+        play = { reply, onStarted -> player.play(reply, backend, onStarted) },
+        speakLocal = player::speakLocal,
+        onStatus = ::setStatus,
+        buzz = ::vibrate,
+    )
     cane = CaneBle(this, hub::onButton) { s -> runOnUiThread { caneStatus.text = s } }
     val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 96, 48, 48) }
     status = TextView(this).apply { setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f); text = "Ready" }

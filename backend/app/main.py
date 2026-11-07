@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from dotenv import load_dotenv
+from pydantic import BaseModel
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
@@ -117,3 +118,22 @@ async def ask(bg: BackgroundTasks, audio: UploadFile = File(...), client_ms: int
         "caption": question, "hazard": False, "latency_ms": client_ms if client_ms is not None else server_ms,
     })
     return {"say": say, "hazard": False, "audio_id": audio_id, "server_ms": server_ms}
+
+
+class HazardIn(BaseModel):
+    source: Literal["yolo", "gemini"]
+    label: str
+    confidence: float | None = None
+    latency_ms: int
+    status: Literal["spoken", "muted", "cooldown"]
+
+
+@app.post("/hazard_event")
+def hazard_event(ev: HazardIn, bg: BackgroundTasks):
+    bg.add_task(db.log_hazard, {"ts": datetime.now(timezone.utc).isoformat(), **ev.model_dump()})
+    return {"ok": True}
+
+
+@app.get("/hazards")
+def hazards():
+    return db.recent_hazards()

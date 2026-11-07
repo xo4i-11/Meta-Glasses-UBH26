@@ -13,6 +13,7 @@ def client(monkeypatch):
     monkeypatch.setenv("SHARED_SECRET", "test")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     db.RECENT.clear()
+    db.HAZARDS.clear()
     tts.STORE.clear()
     monkeypatch.setattr(tts, "preload_hazard_clips", lambda: tts.PINNED.update(hazard_stop=b"s", hazard_duck=b"d"))
     if hasattr(main, "COOLDOWN"):

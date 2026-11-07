@@ -3,6 +3,8 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 
 RECENT: deque = deque(maxlen=200)  # always kept: dashboard + memory work even without Tiger Data
+HAZARDS: deque = deque(maxlen=300)
+HCOLS = ("ts", "source", "label", "confidence", "latency_ms", "status")
 DB_OK = False
 
 COLS = ("ts", "mode", "say", "objects", "caption", "hazard", "latency_ms")
@@ -25,6 +27,9 @@ def init() -> None:
                 ts timestamptz NOT NULL, mode text, say text, objects text[],
                 caption text, hazard bool, latency_ms int)""")
             c.execute("SELECT create_hypertable('events', by_range('ts'), if_not_exists => TRUE)")
+            c.execute("""CREATE TABLE IF NOT EXISTS hazard_events (
+                ts timestamptz NOT NULL, source text, label text, confidence real, latency_ms int, status text)""")
+            c.execute("SELECT create_hypertable('hazard_events', by_range('ts'), if_not_exists => TRUE)")
         DB_OK = True
     except Exception as e:
         print("Tiger Data unavailable, using memory only:", e)
@@ -60,3 +65,19 @@ def recent_observations(minutes: int = 60, limit: int = 40) -> list[dict]:
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     rows = [e for e in reversed(RECENT) if e["objects"] and datetime.fromisoformat(e["ts"]) > cutoff]
     return rows[:limit]
+
+
+def log_hazard(ev: dict) -> None:
+    HAZARDS.append(ev)
+    if not DB_OK:
+        return
+    try:
+        with _conn() as c:
+            c.execute(f"INSERT INTO hazard_events ({','.join(HCOLS)}) VALUES ({','.join(['%s'] * len(HCOLS))})",
+                      [ev[k] for k in HCOLS])
+    except Exception as e:
+        print("Tiger Data hazard insert failed:", e)
+
+
+def recent_hazards(limit: int = 100) -> list[dict]:
+    return list(reversed(HAZARDS))[:limit]

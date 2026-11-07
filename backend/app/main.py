@@ -90,3 +90,30 @@ def events():
 @app.get("/")
 def dashboard():
     return FileResponse(Path(__file__).parent / "static" / "index.html")
+
+
+DEFAULT_QUESTION = "where are my keys?"
+
+
+@app.post("/ask")
+async def ask(bg: BackgroundTasks, audio: UploadFile = File(...), client_ms: int | None = Form(None)):
+    t0 = time.monotonic()
+    data = await audio.read()
+    question = (await run_in_threadpool(tts.transcribe, data, audio.filename or "q.m4a")) if data else ""
+    question = question or DEFAULT_QUESTION
+    rows = await run_in_threadpool(db.recent_observations)
+    if not rows:
+        say = "I haven't seen anything yet."
+    else:
+        try:
+            say = await run_in_threadpool(gemini.answer, question, rows)
+        except gemini.GeminiError as e:
+            print("gemini answer failed:", e)
+            say = "Sorry, I couldn't remember that."
+    audio_id = await run_in_threadpool(tts.speak, say)
+    server_ms = int((time.monotonic() - t0) * 1000)
+    bg.add_task(db.log_event, {
+        "ts": datetime.now(timezone.utc).isoformat(), "mode": "ask", "say": say, "objects": [],
+        "caption": question, "hazard": False, "latency_ms": client_ms if client_ms is not None else server_ms,
+    })
+    return {"say": say, "hazard": False, "audio_id": audio_id, "server_ms": server_ms}

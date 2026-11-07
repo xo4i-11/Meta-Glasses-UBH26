@@ -64,3 +64,21 @@ def analyze(jpeg: bytes, mode: str) -> Vision:
     if not isinstance(resp.parsed, Vision):
         raise GeminiError("unparseable response")
     return resp.parsed
+
+
+def answer(question: str, rows: list[dict]) -> str:
+    """Answer a memory question from logged observations (newest first). Raises GeminiError."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    lines = [f"{int((now - datetime.fromisoformat(r['ts'])).total_seconds() // 60)} min ago: {', '.join(r['objects'])}"
+             for r in rows]
+    prompt = ("You help a blind person remember where things are. Below are things their camera saw, newest first.\n"
+              + "\n".join(lines)
+              + f"\n\nQuestion: {question}\nAnswer in one short sentence with the place and how long ago "
+              "(e.g. 'Your keys are on the table near the door, 4 minutes ago'). "
+              "If it was not seen, say you haven't seen it.")
+    resp = _generate([prompt])
+    text = (resp.text or "").strip()
+    if not text:
+        raise GeminiError("empty answer")
+    return text

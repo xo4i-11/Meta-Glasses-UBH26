@@ -115,3 +115,36 @@ def test_recent_observations_filters_empty_and_old(client):
     db.log_event({"ts": now.isoformat(), "mode": "describe", "say": "", "objects": ["keys on table"], "caption": "", "hazard": False, "latency_ms": 1})
     rows = db.recent_observations(minutes=60)
     assert [r["objects"] for r in rows] == [["keys on table"]]
+
+
+def test_ask_empty_stt_defaults_to_keys(client, monkeypatch, fake_speak):
+    from app import gemini, tts
+    from datetime import datetime, timezone
+    db.log_event({"ts": datetime.now(timezone.utc).isoformat(), "mode": "describe", "say": "", "objects": ["keys on table"], "caption": "", "hazard": False, "latency_ms": 1})
+    monkeypatch.setattr(tts, "transcribe", lambda a, f: "")
+    seen = {}
+    def answer(q, rows):
+        seen["q"], seen["rows"] = q, rows
+        return "Your keys are on the table, 0 minutes ago."
+    monkeypatch.setattr(gemini, "answer", answer)
+    r = client.post("/ask", headers=H, files={"audio": ("a.m4a", b"x")}).json()
+    assert seen["q"] == "where are my keys?" and seen["rows"][0]["objects"] == ["keys on table"]
+    assert r["say"] == "Your keys are on the table, 0 minutes ago." and r["audio_id"] == "a1"
+    assert db.RECENT[-1]["mode"] == "ask"
+
+
+def test_ask_no_observations(client, monkeypatch, fake_speak):
+    from app import tts
+    monkeypatch.setattr(tts, "transcribe", lambda a, f: "where are my keys?")
+    r = client.post("/ask", headers=H, files={"audio": ("a.m4a", b"x")}).json()
+    assert r["say"] == "I haven't seen anything yet."
+
+
+def test_ask_gemini_error(client, monkeypatch, fake_speak):
+    from app import gemini, tts
+    from datetime import datetime, timezone
+    db.log_event({"ts": datetime.now(timezone.utc).isoformat(), "mode": "describe", "say": "", "objects": ["keys"], "caption": "", "hazard": False, "latency_ms": 1})
+    monkeypatch.setattr(tts, "transcribe", lambda a, f: "where are my keys?")
+    def boom(q, rows): raise gemini.GeminiError("x")
+    monkeypatch.setattr(gemini, "answer", boom)
+    assert client.post("/ask", headers=H, files={"audio": ("a.m4a", b"x")}).json()["say"] == "Sorry, I couldn't remember that."

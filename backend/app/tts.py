@@ -49,3 +49,13 @@ def preload_hazard_clips() -> None:
 
 
 PINNED: dict[str, bytes] = {}
+
+
+def transcribe(audio: bytes, filename: str) -> str:
+    """ElevenLabs Scribe speech-to-text. "" on any failure."""
+    try:
+        res = _client().speech_to_text.convert(model_id="scribe_v1", file=(filename, audio), language_code="eng")
+        return (getattr(res, "text", "") or "").strip()
+    except Exception as e:
+        print("stt failed:", e)
+        return ""

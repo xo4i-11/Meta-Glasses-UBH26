@@ -81,3 +81,37 @@ def test_hazard_cooldown(client, fake_vision):
     assert post_frame(client, "hazard")["audio_id"] == "hazard_stop"
     second = post_frame(client, "hazard")
     assert second["audio_id"] is None and second["say"] == ""  # within 10 s
+
+
+def test_events_newest_first(client, fake_vision, fake_speak):
+    fake_vision(Vision(hazard=False, say="first", objects=[], caption=""))
+    post_frame(client, "describe")
+    fake_vision(Vision(hazard=False, say="second", objects=[], caption=""))
+    post_frame(client, "describe")
+    ev = client.get("/events", headers=H).json()
+    assert [e["say"] for e in ev[:2]] == ["second", "first"]
+
+
+def test_events_requires_secret(client):
+    assert client.get("/events").status_code == 401
+
+
+def test_log_without_db_does_not_fail(client, fake_vision, fake_speak):
+    fake_vision(Vision(hazard=False, say="A door.", objects=["door"], caption=""))
+    assert client.post("/frame", headers=H, files={"image": ("f.jpg", JPG)}, data={"mode": "describe"}).status_code == 200
+    assert client.get("/events", headers=H).json()[0]["say"] == "A door."
+
+
+def test_dashboard_served(client):
+    r = client.get("/?key=test")
+    assert r.status_code == 200 and "Smart Eyes" in r.text
+
+
+def test_recent_observations_filters_empty_and_old(client):
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    db.log_event({"ts": (now - timedelta(minutes=90)).isoformat(), "mode": "describe", "say": "", "objects": ["old keys"], "caption": "", "hazard": False, "latency_ms": 1})
+    db.log_event({"ts": now.isoformat(), "mode": "hazard", "say": "", "objects": [], "caption": "", "hazard": False, "latency_ms": 1})
+    db.log_event({"ts": now.isoformat(), "mode": "describe", "say": "", "objects": ["keys on table"], "caption": "", "hazard": False, "latency_ms": 1})
+    rows = db.recent_observations(minutes=60)
+    assert [r["objects"] for r in rows] == [["keys on table"]]

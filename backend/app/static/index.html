@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Eyes</title>
+<style>
+  :root { --bg:#0f1115; --fg:#eef0f3; --muted:#9aa3ad; --line:#262a31; --hazard:#ff5a4e; --hazard-bg:#3a1714; --ok:#4cc38a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:18px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:16px 32px; align-items:baseline; padding:20px 24px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:28px; }
+  .stat { color:var(--muted); } .stat b { color:var(--fg); font-size:24px; font-variant-numeric:tabular-nums; }
+  #live { color:var(--ok); } #live.down { color:var(--hazard); }
+  main { display:grid; grid-template-columns: 2fr 1fr; gap:24px; padding:24px; }
+  @media (max-width: 800px) { main { grid-template-columns:1fr; padding:16px; } }
+  h2 { margin:0 0 12px; font-size:16px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; }
+  td { padding:10px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  td.t, td.ms { color:var(--muted); white-space:nowrap; font-variant-numeric:tabular-nums; }
+  td.ms { text-align:right; }
+  tr.hz td { background:var(--hazard-bg); } tr.hz td.say { color:var(--hazard); font-weight:600; }
+  .mode { font-size:13px; padding:2px 8px; border:1px solid var(--line); border-radius:99px; color:var(--muted); }
+  #hazards li { padding:10px 0; border-bottom:1px solid var(--line); color:var(--hazard); font-weight:600; list-style:none; }
+  #hazards { padding:0; margin:0; } #hazards span { color:var(--muted); font-weight:400; margin-right:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Smart Eyes</h1>
+  <span id="live">● live</span>
+  <span class="stat">hazard median <b id="m-hazard">–</b> ms</span>
+  <span class="stat">describe median <b id="m-describe">–</b> ms</span>
+  <span class="stat">ask median <b id="m-ask">–</b> ms</span>
+</header>
+<main>
+  <section><h2>Live log</h2><table><tbody id="log"></tbody></table></section>
+  <section><h2>Hazards</h2><ul id="hazards"></ul></section>
+</main>
+<script>
+const key = new URLSearchParams(location.search).get('key') || '';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const time = ts => new Date(ts).toLocaleTimeString();
+const median = a => { if (!a.length) return '–'; a = [...a].sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
+async function tick() {
+  try {
+    const r = await fetch('/events?key=' + encodeURIComponent(key));
+    if (!r.ok) throw new Error(r.status);
+    const ev = await r.json();
+    document.getElementById('live').className = '';
+    document.getElementById('log').innerHTML = ev.filter(e => e.say).map(e =>
+      `<tr class="${e.hazard ? 'hz' : ''}"><td class="t">${time(e.ts)}</td><td><span class="mode">${esc(e.mode)}</span></td>` +
+      `<td class="say">${esc(e.say)}</td><td class="ms">${e.latency_ms} ms</td></tr>`).join('');
+    document.getElementById('hazards').innerHTML = ev.filter(e => e.hazard && e.say).map(e =>
+      `<li><span>${time(e.ts)}</span>${esc(e.say)}</li>`).join('');
+    for (const m of ['hazard', 'describe', 'ask'])
+      document.getElementById('m-' + m).textContent = median(ev.filter(e => e.mode === m).map(e => e.latency_ms));
+  } catch { document.getElementById('live').className = 'down'; }
+}
+tick(); setInterval(tick, 2000);
+</script>
+</body>
+</html>

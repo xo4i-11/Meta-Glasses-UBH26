@@ -7,6 +7,8 @@ from typing import Literal
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse
+from pathlib import Path
 
 from app import db, gemini, tts
 from app.cooldown import Cooldown
@@ -26,6 +28,7 @@ def auth(request: Request):
 
 @asynccontextmanager
 async def lifespan(app):
+    await run_in_threadpool(db.init)
     await run_in_threadpool(tts.preload_hazard_clips)
     yield
 
@@ -77,3 +80,13 @@ def audio(audio_id: str):
     if data is None:
         raise HTTPException(404)
     return Response(data, media_type="audio/mpeg")
+
+
+@app.get("/events")
+def events():
+    return db.recent_events()
+
+
+@app.get("/")
+def dashboard():
+    return FileResponse(Path(__file__).parent / "static" / "index.html")

@@ -26,12 +26,16 @@ class MainActivity : ComponentActivity() {
   private lateinit var status: TextView
   private lateinit var sourceBtn: Button
   private lateinit var hub: Hub
+  private lateinit var cane: CaneBle
+  private lateinit var caneStatus: TextView
   private var datReady = false
 
-  private val perms = registerForActivityResult(RequestMultiplePermissions()) {
+  private val perms = registerForActivityResult(RequestMultiplePermissions()) { granted ->
     Wearables.initialize(this)
     datReady = true
-    phone.start()
+    if (granted[Manifest.permission.CAMERA] != false) phone.start()
+    if (granted[Manifest.permission.BLUETOOTH_SCAN] != false && granted[Manifest.permission.BLUETOOTH_CONNECT] != false) cane.start()
+    else caneStatus.text = "Cane: Bluetooth permission denied"
   }
 
   private val glassesCameraPerm = registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
@@ -45,8 +49,11 @@ class MainActivity : ComponentActivity() {
     glasses = GlassesFrameSource(lifecycleScope, ::setStatus)
     source = phone
     hub = Hub(lifecycleScope, { source }, backend, player, ::setStatus, ::vibrate)
+    cane = CaneBle(this, hub::onButton) { s -> runOnUiThread { caneStatus.text = s } }
     val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 96, 48, 48) }
     status = TextView(this).apply { setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f); text = "Ready" }
+    caneStatus = TextView(this).apply { setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f); text = "Cane: off" }
+    root.addView(caneStatus)
     root.addView(status)
     root.addView(button("Describe") { hub.onButton(1) })
     root.addView(button("Read text") { hub.onButton(2) })
@@ -57,7 +64,12 @@ class MainActivity : ComponentActivity() {
     sourceBtn = button("Camera: phone. Tap to connect glasses") { toggleSource() }
     root.addView(sourceBtn)
     setContentView(root)
-    perms.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.BLUETOOTH_CONNECT))
+    perms.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN))
+  }
+
+  override fun onDestroy() {
+    cane.stop()
+    super.onDestroy()
   }
 
   private fun toggleSource() {

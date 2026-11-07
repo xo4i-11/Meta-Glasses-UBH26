@@ -148,3 +148,8 @@ def test_ask_gemini_error(client, monkeypatch, fake_speak):
     def boom(q, rows): raise gemini.GeminiError("x")
     monkeypatch.setattr(gemini, "answer", boom)
     assert client.post("/ask", headers=H, files={"audio": ("a.m4a", b"x")}).json()["say"] == "Sorry, I couldn't remember that."
+
+
+def test_dashboard_has_timeline(client):
+    html = client.get("/?key=test").text
+    assert 'id="timeline"' in html and "/hazards" in html

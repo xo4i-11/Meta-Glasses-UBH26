@@ -48,7 +48,8 @@ class MainActivity : ComponentActivity() {
     phone = PhoneFrameSource(this)
     glasses = GlassesFrameSource(lifecycleScope, ::setStatus)
     source = phone
-    hub = Hub(lifecycleScope, { source }, backend, player, ::setStatus, ::vibrate)
+    val recorder = VoiceRecorder(this)
+    hub = Hub(lifecycleScope, { source }, backend, player, ::setStatus, ::vibrate, recorder::record4s)
     cane = CaneBle(this, hub::onButton) { s -> runOnUiThread { caneStatus.text = s } }
     val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 96, 48, 48) }
     status = TextView(this).apply { setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f); text = "Ready" }
@@ -57,6 +58,7 @@ class MainActivity : ComponentActivity() {
     root.addView(status)
     root.addView(button("Describe") { hub.onButton(1) })
     root.addView(button("Read text") { hub.onButton(2) })
+    root.addView(button("Ask: where are my keys?") { hub.onButton(3) })
     root.addView(button("Hazard warnings: off") {
       if (hub.hazardsOn) hub.stopHazards() else hub.startHazards()
       (it as Button).text = if (hub.hazardsOn) "Hazard warnings: on" else "Hazard warnings: off"
@@ -64,7 +66,7 @@ class MainActivity : ComponentActivity() {
     sourceBtn = button("Camera: phone. Tap to connect glasses") { toggleSource() }
     root.addView(sourceBtn)
     setContentView(root)
-    perms.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN))
+    perms.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.RECORD_AUDIO))
   }
 
   override fun onDestroy() {

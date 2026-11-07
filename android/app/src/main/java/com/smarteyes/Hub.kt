@@ -20,6 +20,7 @@ class Hub(
     private val player: Player,
     private val onStatus: (String) -> Unit,
     private val buzz: () -> Unit,
+    private val recordQuestion: suspend () -> ByteArray?,
     private val cadenceMs: Long = 4000,
 ) {
   private val gate = Gate()
@@ -50,6 +51,7 @@ class Hub(
     val mode = when (event) {
       1 -> "describe"
       2 -> "read_text"
+      3 -> "ask"
       else -> return
     }
     buzz()
@@ -65,8 +67,15 @@ class Hub(
     val t0 = SystemClock.elapsedRealtime()
     inFlight = scope.launch {
       try {
-        val jpeg = source().latestJpeg() ?: return@launch onStatus("No camera frame")
-        val reply = backend.frame(jpeg, mode, lastClientMs)
+        val reply = if (mode == "ask") {
+          player.speakLocal("Listening")
+          delay(800)
+          // Empty audio -> backend falls back to "where are my keys?"
+          backend.ask(recordQuestion() ?: ByteArray(0), "question.m4a", lastClientMs)
+        } else {
+          val jpeg = source().latestJpeg() ?: return@launch onStatus("No camera frame")
+          backend.frame(jpeg, mode, lastClientMs)
+        }
         if (mode == "hazard" && reply.audioId == null) return@launch // nothing at head height: stay silent
         player.play(reply, backend) {
           lastClientMs = (SystemClock.elapsedRealtime() - t0).toInt()

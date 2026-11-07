@@ -39,6 +39,13 @@ class YoloTracker {
     }
     return null
   }
+
+  /** Forget the last warning so the same obstacle can warn again (used when a warning was muted by recording). */
+  fun rearm() {
+    armed = true
+    hits = 0
+    misses = 0
+  }
 }
 
 enum class HazardStatus {

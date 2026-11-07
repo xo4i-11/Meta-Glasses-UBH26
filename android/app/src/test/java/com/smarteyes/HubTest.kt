@@ -26,6 +26,7 @@ class HubTest {
   private fun hub(
       test: TestScope,
       yoloScan: (suspend () -> YoloScan?)? = null,
+      playHazard: () -> Unit = { hazardClips++ },
       request: suspend (String, Int?) -> Reply?,
   ) = Hub(
       scope = CoroutineScope(UnconfinedTestDispatcher(test.testScheduler) + CoroutineExceptionHandler { _, e -> crashes += e }),
@@ -36,7 +37,7 @@ class HubTest {
       buzz = {},
       now = { test.testScheduler.currentTime },
       yoloScan = yoloScan,
-      playHazard = { hazardClips++ },
+      playHazard = playHazard,
       logHazard = { src, label, _, _, status -> hazardLog += "$src $label ${status.wire}" },
   )
 
@@ -96,5 +97,25 @@ class HubTest {
     h.startHazards(); runCurrent(); h.stopHazards()
     assertEquals(listOf("gemini Duck, head height spoken"), hazardLog)
     assertEquals(1, played.size)
+  }
+
+  @Test fun obstacleMutedDuringQuestionIsAnnouncedAfterwards() = TestScope().run {
+    val h = hub(this, yoloScan = { YoloScan(listOf(umbrella), 30) }) { mode, _ ->
+      if (mode == "ask") { delay(2000); Reply("Your keys are on the desk.", false, null, 0) } else Reply("", false, null, 0)
+    }
+    h.onButton(3)          // voice question in progress for 2 s
+    h.startHazards(); advanceTimeBy(3500); h.stopHazards()
+    assertTrue(hazardLog.toString(), hazardLog.first() == "yolo umbrella muted")
+    assertTrue(hazardLog.toString(), "yolo umbrella spoken" in hazardLog) // re-armed, warned once the question ended
+    assertEquals(1, hazardClips)
+  }
+
+  @Test fun brokenHazardClipStillLogsAndDoesNotKillYolo() = TestScope().run {
+    var scans = 0
+    val h = hub(this, yoloScan = { scans++; YoloScan(listOf(umbrella), 30) }, playHazard = { throw IllegalStateException("corrupt mp3") }) { _, _ -> Reply("", false, null, 0) }
+    h.startHazards(); advanceTimeBy(2000); h.stopHazards()
+    assertEquals(listOf("yolo umbrella spoken"), hazardLog)
+    assertTrue(crashes.isEmpty())
+    assertTrue("loop kept scanning", scans >= 5)
   }
 }

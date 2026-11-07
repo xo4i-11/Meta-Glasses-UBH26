@@ -46,7 +46,9 @@ class Player(context: Context) {
   fun playHazard() {
     stop()
     if (hazardClip.length() == 0L) return speakLocal("Careful, head height.")
-    mp = MediaPlayer().apply {
+    val player = MediaPlayer()
+    try {
+      mp = player.apply {
       setAudioAttributes(AudioAttributes.Builder()
           .setUsage(AudioAttributes.USAGE_MEDIA)
           .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -56,6 +58,12 @@ class Player(context: Context) {
       setOnCompletionListener { it.release(); if (mp === it) mp = null }
       prepare()
       start()
+      }
+    } catch (e: Exception) { // corrupt/partial clip: drop it so the next launch re-downloads, speak via TTS now
+      player.release()
+      mp = null
+      hazardClip.delete()
+      speakLocal("Careful, head height.")
     }
   }
 

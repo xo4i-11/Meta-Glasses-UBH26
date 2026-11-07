@@ -50,7 +50,14 @@ class Backend(private val baseUrl: String, val secret: String) {
   suspend fun download(id: String, dest: java.io.File): Boolean = try {
     withContext(Dispatchers.IO) {
       val req = Request.Builder().url(audioUrl(id)).header("X-Secret", secret).build()
-      http.newCall(req).execute().use { r -> r.isSuccessful && r.body!!.bytes().also { dest.writeBytes(it) }.isNotEmpty() }
+      http.newCall(req).execute().use { r ->
+        if (!r.isSuccessful) return@use false
+        val bytes = r.body!!.bytes()
+        if (bytes.isEmpty()) return@use false
+        // Write to a temp file then rename, so a killed app never leaves a half-written clip behind.
+        val tmp = java.io.File(dest.path + ".part").apply { writeBytes(bytes) }
+        tmp.renameTo(dest)
+      }
     }
   } catch (e: Exception) {
     if (e is kotlinx.coroutines.CancellationException) throw e

@@ -53,7 +53,16 @@ class PhoneFrameSource(private val activity: ComponentActivity) : FrameSource {
     val future = ProcessCameraProvider.getInstance(activity)
     future.addListener({
       val p = future.get()
-      val c = ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build()
+      // ~720p is plenty (frames are shrunk to 512 px); full-sensor captures every 400 ms for YOLO thrash memory.
+      val res = androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
+          .setResolutionStrategy(androidx.camera.core.resolutionselector.ResolutionStrategy(
+              android.util.Size(1280, 720),
+              androidx.camera.core.resolutionselector.ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER))
+          .build()
+      val c = ImageCapture.Builder()
+          .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+          .setResolutionSelector(res)
+          .build()
       p.unbindAll()
       p.bindToLifecycle(activity, CameraSelector.DEFAULT_BACK_CAMERA, c)
       provider = p

@@ -86,8 +86,17 @@ class Hub(
     val warn = tracker.update(headHazard(s.dets))
     val status = warn?.let { quiet.decide(now(), recording) }
     if (warn != null && status != null) {
-      if (status == HazardStatus.SPOKEN) playHazard()
       logHazard("yolo", warn.label, warn.conf, s.latencyMs, status)
+      // Muted only because a question was recording: don't lose this obstacle, warn again once it ends.
+      if (status == HazardStatus.MUTED && recording) tracker.rearm()
+      if (status == HazardStatus.SPOKEN) {
+        try {
+          playHazard()
+        } catch (e: Exception) {
+          speakLocal("Careful, head height.")
+          onStatus("Hazard clip failed: ${e.message}")
+        }
+      }
     }
     onYolo(s, warn, status)
   }

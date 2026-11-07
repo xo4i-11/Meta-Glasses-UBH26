@@ -38,25 +38,34 @@ def _keys() -> list[str]:
 
 
 def _generate(contents, schema=None):
-    """Call Gemini, rotating to the next key on 429. Raises GeminiError on any failure."""
+    """Call Gemini. GEMINI_MODEL may be a comma list: on 429/503 try the next key, then the next model.
+    Raises GeminiError on any failure."""
     global _key_idx
     keys = _keys()
     if not keys:
         raise GeminiError("no GEMINI_API_KEYS")
-    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
-    cfg = types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema) if schema else None
-    for _ in range(len(keys)):
-        client = genai.Client(api_key=keys[_key_idx % len(keys)], http_options=types.HttpOptions(timeout=8000))
-        try:
-            return client.models.generate_content(model=model, contents=contents, config=cfg)
-        except errors.APIError as e:
-            if e.code == 429:
-                _key_idx += 1
-                continue
-            raise GeminiError(str(e)) from e
-        except Exception as e:  # timeouts, network
-            raise GeminiError(str(e)) from e
-    raise GeminiError("all keys rate-limited")
+    models = [m.strip() for m in os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite").split(",") if m.strip()]
+    # MINIMAL thinking: 3.x models think by default, which costs seconds we don't have on the hazard path.
+    thinking = types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL)
+    cfg = (types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema, thinking_config=thinking)
+           if schema else types.GenerateContentConfig(thinking_config=thinking))
+    last = "all keys/models busy"
+    for model in models:
+        for _ in range(len(keys)):
+            client = genai.Client(api_key=keys[_key_idx % len(keys)], http_options=types.HttpOptions(timeout=10000))
+            try:
+                return client.models.generate_content(model=model, contents=contents, config=cfg)
+            except errors.APIError as e:
+                last = str(e)
+                if e.code == 429:
+                    _key_idx += 1  # this key is rate-limited: next key
+                    continue
+                if e.code == 503:
+                    break  # model overloaded for everyone: next model
+                raise GeminiError(last) from e
+            except Exception as e:  # timeouts, network
+                raise GeminiError(str(e)) from e
+    raise GeminiError(last)
 
 
 def analyze(jpeg: bytes, mode: str) -> Vision:

@@ -41,6 +41,7 @@ class CaneLink(private val baseUrl: () -> String, private val token: String) {
   private val main = Handler(Looper.getMainLooper())
   private var socket: WebSocket? = null
   private var running = false
+  @Volatile private var lastAttemptAt = 0L
 
   private val _serverUp = MutableStateFlow(false)
   val serverUp: StateFlow<Boolean> = _serverUp
@@ -52,16 +53,35 @@ class CaneLink(private val baseUrl: () -> String, private val token: String) {
   fun start() {
     running = true
     connect()
+    main.postDelayed(watchdog, 5000)
   }
+
+  /** Belt and braces: if the link has been down >10 s with no live attempt (half-open socket after a
+   *  USB/Wi-Fi drop), throw the socket away and dial again. */
+  private val watchdog: Runnable =
+      object : Runnable {
+        override fun run() {
+          if (!running) return
+          if (!_serverUp.value && System.currentTimeMillis() - lastAttemptAt > 10_000) {
+            Log.w(TAG, "watchdog: link down, redialling")
+            socket?.cancel()
+            socket = null
+            connect()
+          }
+          main.postDelayed(this, 5000)
+        }
+      }
 
   fun stop() {
     running = false
+    main.removeCallbacks(watchdog)
     socket?.close(1000, "bye")
     socket = null
   }
 
   private fun connect() {
     if (!running) return
+    lastAttemptAt = System.currentTimeMillis()
     socket = runCatching { http.newWebSocket(Request.Builder().url(url()).build(), listener) }.getOrElse {
       Log.w(TAG, "bad server address: ${it.message}")
       retry()
@@ -101,11 +121,18 @@ class CaneLink(private val baseUrl: () -> String, private val token: String) {
           ev?.let { _events.tryEmit(it) }
         }
 
-        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = retry()
+        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+          webSocket.close(1000, null) // server is closing (restart): finish the handshake, then redial
+          if (webSocket === socket) retry()
+        }
+
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+          if (webSocket === socket) retry()
+        }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
           Log.w(TAG, "relay connection failed: ${t.message}")
-          retry()
+          if (webSocket === socket || socket == null) retry() // ignore late failures of sockets we already replaced
         }
       }
 
@@ -117,6 +144,7 @@ class CaneLink(private val baseUrl: () -> String, private val token: String) {
   }
 
   private fun retry() {
+    socket = null
     _serverUp.value = false
     _caneOnline.value = false
     if (running) main.postDelayed({ connect() }, 2000)

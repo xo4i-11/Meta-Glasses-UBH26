@@ -46,8 +46,12 @@ data class UiState(
     val caregiver: String = "",
     val serverUrl: String = "",
     val alarm: String = "",
+    val showFeed: Boolean = true,
     val log: List<String> = emptyList(),
 )
+
+/** The newest camera frame and what YOLO found in it, for the on-screen camera view. */
+data class Preview(val frame: Bitmap, val dets: List<Detection>)
 
 /**
  * The hub on the phone.
@@ -71,8 +75,14 @@ class SmartEyesController(private val context: Context) {
   private val detector by lazy { ObstacleDetector(context) }
   private val hazards = HazardEngine()
 
-  private val _ui = MutableStateFlow(UiState(caregiver = sos.caregiverNumber, serverUrl = backend.baseUrl))
+  private val _ui =
+      MutableStateFlow(
+          UiState(caregiver = sos.caregiverNumber, serverUrl = backend.baseUrl, showFeed = prefs.getBoolean("show_feed", true)))
   val ui: StateFlow<UiState> = _ui
+
+  // Only filled while the camera view is switched on, so a hidden view costs nothing.
+  private val _preview = MutableStateFlow<Preview?>(null)
+  val preview: StateFlow<Preview?> = _preview
 
   @Volatile private var latestFrame: Bitmap? = null
   @Volatile private var latestDets: List<Detection> = emptyList()
@@ -136,11 +146,15 @@ class SmartEyesController(private val context: Context) {
 
   private fun onFrame(bmp: Bitmap) {
     latestFrame = bmp
-    if (!detector.isReady) return
+    if (!detector.isReady) {
+      if (_ui.value.showFeed) _preview.value = Preview(bmp, emptyList())
+      return
+    }
     val t0 = SystemClock.elapsedRealtime()
     val dets = detector.detect(bmp)
     val ms = SystemClock.elapsedRealtime() - t0
     latestDets = dets
+    if (_ui.value.showFeed) _preview.value = Preview(bmp, shownDets(dets))
     _ui.update { it.copy(yoloMs = ms) }
     logMemory(dets)
 
@@ -273,9 +287,20 @@ class SmartEyesController(private val context: Context) {
   fun toggleAuto() {
     val on = !_ui.value.autoAnnounce
     _ui.update { it.copy(autoAnnounce = on) }
+    _preview.value?.let { p -> _preview.value = Preview(p.frame, shownDets(latestDets)) } // boxes on/off right away
     cane.setAuto(on)
     voice.warn(if (on) "Announcements on" else "Announcements off")
   }
+
+  fun toggleFeed() {
+    val on = !_ui.value.showFeed
+    prefs.edit().putBoolean("show_feed", on).apply()
+    _ui.update { it.copy(showFeed = on) }
+    _preview.value = if (on) latestFrame?.let { Preview(it, shownDets(latestDets)) } else null
+  }
+
+  /** YOLO boxes are drawn only while Announce is on; with it off the camera view shows the bare picture. */
+  private fun shownDets(dets: List<Detection>) = if (_ui.value.autoAnnounce) dets else emptyList()
 
   fun setAnnounceSeconds(sec: Int) {
     val s = sec.coerceIn(5, 10)

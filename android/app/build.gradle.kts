@@ -22,7 +22,8 @@ android {
   }
 
   defaultConfig {
-    applicationId = "com.smarteyes.app"
+    // Own id so it installs next to the original full-stack build (different signing key on the phone).
+    applicationId = "com.smarteyes.app.largeprint"
     minSdk = 31
     targetSdk = 36
     versionCode = 1

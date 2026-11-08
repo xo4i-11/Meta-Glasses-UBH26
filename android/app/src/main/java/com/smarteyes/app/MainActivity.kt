@@ -262,6 +262,11 @@ class MainActivity : ComponentActivity() {
                     controller.glasses.stop()
                     controller.glasses.start()
                   }
+                  // Drops the Meta AI link so "Connect glasses" asks for access again.
+                  SmallButton("Re-link glasses", Modifier.weight(1f)) {
+                    controller.glasses.stop()
+                    Wearables.startUnregistration(this@MainActivity)
+                  }
                 }
                 SmallButton(if (s.usingPhoneCamera) "Phone cam: ON" else "Phone cam: OFF", Modifier.weight(1f)) {
                   controller.usePhoneCamera(!s.usingPhoneCamera)

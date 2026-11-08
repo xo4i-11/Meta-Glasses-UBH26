@@ -57,9 +57,12 @@ class GlassesCamera(private val context: Context, private val scope: CoroutineSc
   private var wanted = false
   private var retryJob: Job? = null
   private var attempts = 0
+  private var watchdog: Job? = null
+  @Volatile private var aliveAt = 0L // last sign of life: session created, camera attached, or a frame
 
   fun start() {
     wanted = true
+    startWatchdog()
     retryJob?.cancel()
     retryJob = null
     if (session != null) return
@@ -68,6 +71,7 @@ class GlassesCamera(private val context: Context, private val scope: CoroutineSc
         .onSuccess { s ->
           session = s
           attempts = 0
+          aliveAt = SystemClock.elapsedRealtime()
           jobs +=
               scope.launch {
                 s.state.collect { st ->
@@ -111,6 +115,7 @@ class GlassesCamera(private val context: Context, private val scope: CoroutineSc
       s.addCamera(StreamConfiguration(videoQuality = VideoQuality.MEDIUM, frameRate = 15, compressVideo = false))
           .onSuccess { cam ->
             camera = cam
+            aliveAt = SystemClock.elapsedRealtime()
             val st = cam.stream
             stream = st
             jobs += scope.launch { st.videoStream.collect { onFrame(it) } }
@@ -124,6 +129,7 @@ class GlassesCamera(private val context: Context, private val scope: CoroutineSc
   private fun onFrame(frame: VideoFrame) {
     if (frame.isCompressed) return // we asked for raw; ignore HEVC
     val now = SystemClock.elapsedRealtime()
+    aliveAt = now
     if (now - lastFrameAt < 1000L / maxFps) return
     lastFrameAt = now
     FrameUtils.i420ToBitmap(frame.buffer, frame.width, frame.height)?.let { _frames.tryEmit(it) }
@@ -148,8 +154,32 @@ class GlassesCamera(private val context: Context, private val scope: CoroutineSc
         }
       }
 
+  /**
+   * The session can die without ever reporting STOPPED (e.g. "Link switch timed out", "Timed out bootstrapping
+   * DWA stream channel"), leaving us stuck at "starting". No sign of life for 15 s -> tear down and reconnect.
+   * ponytail: 15 s also covers the Meta AI permission screen; raise it if that prompt gets cut off.
+   */
+  private fun startWatchdog() {
+    if (watchdog?.isActive == true) return
+    watchdog = scope.launch {
+      while (true) {
+        delay(5000)
+        val idle = SystemClock.elapsedRealtime() - aliveAt
+        if (wanted && session != null && idle > 15_000) {
+          Log.w(TAG, "no video for ${idle / 1000} s, reconnecting")
+          camera?.stop()
+          session?.stop()
+          cleanup("no video, reconnecting…")
+          delay(3000)
+          if (wanted && session == null) start()
+        }
+      }
+    }
+  }
+
   fun stop() {
     wanted = false
+    watchdog?.cancel()
     retryJob?.cancel()
     camera?.stop()
     session?.stop()

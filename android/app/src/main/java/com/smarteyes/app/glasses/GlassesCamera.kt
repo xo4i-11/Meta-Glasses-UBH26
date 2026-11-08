@@ -73,7 +73,15 @@ class GlassesCamera(private val context: Context, private val scope: CoroutineSc
                 s.state.collect { st ->
                   Log.i(TAG, "session $st")
                   if (st == DeviceSessionState.STARTED) ensureCamera(s)
-                  if (st == DeviceSessionState.STOPPED && camera != null) cleanup("glasses disconnected")
+                  if (st == DeviceSessionState.STOPPED) {
+                    // Glasses dropped (taken off, folded, Bluetooth hiccup), maybe before the camera was attached:
+                    // always tidy up and, unless we were asked to stop, reconnect in 3 s.
+                    cleanup("glasses disconnected, reconnecting…")
+                    if (wanted) retryJob = scope.launch {
+                      delay(3000)
+                      if (wanted && session == null) start()
+                    }
+                  }
                 }
               }
           s.start()

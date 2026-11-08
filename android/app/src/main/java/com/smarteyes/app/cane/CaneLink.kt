@@ -18,9 +18,7 @@ import org.json.JSONObject
 
 /** Messages from the cane (firmware/smart_cane/smart_cane.ino), relayed by the backend. */
 sealed class CaneEvent {
-  data class Telemetry(val distanceCm: Int, val hole: Boolean) : CaneEvent()
-
-  data class Hole(val on: Boolean) : CaneEvent()
+  data class Telemetry(val distanceCm: Int) : CaneEvent()
 
   /** describe | read | ask | repeat | auto */
   data class Button(val name: String) : CaneEvent()
@@ -88,9 +86,8 @@ class CaneLink(private val baseUrl: () -> String, private val token: String) {
                 }
                 "tele" -> {
                   _caneOnline.value = true
-                  CaneEvent.Telemetry(o.optInt("d", -1), o.optBoolean("hole"))
+                  CaneEvent.Telemetry(o.optInt("d", -1))
                 }
-                "hole" -> CaneEvent.Hole(o.optBoolean("on"))
                 "btn" -> CaneEvent.Button(o.optString("b"))
                 "fall" -> CaneEvent.FallCountdown
                 "cancel" -> CaneEvent.Cancelled

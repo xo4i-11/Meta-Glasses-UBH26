@@ -22,8 +22,8 @@
 
 // Right header: 4 speaker, 3 joystick button, 1 joystick Y, 0 joystick X
 const int PIN_SPK = 4, PIN_SW = 3, PIN_JOY_Y = 1, PIN_JOY_X = 0;
-// Left header: 6 SDA, 7 SCL, 10 IR, 20 TRIG, 21 ECHO (through the 1k/2k divider)
-const int PIN_SDA = 6, PIN_SCL = 7, PIN_IR = 10, PIN_TRIG = 20, PIN_ECHO = 21;
+// Left header: 6 SDA, 7 SCL, 20 TRIG, 21 ECHO (through the 1k/2k divider)
+const int PIN_SDA = 6, PIN_SCL = 7, PIN_TRIG = 20, PIN_ECHO = 21;
 const int PIN_LED = 8;
 const int SPARE[] = {2, 5, 9};  // "pin finder": pulled up, a button to GND reads 0
 const uint8_t ADXL = 0x53;
@@ -227,7 +227,6 @@ void setup() {
   Serial.begin(115200);
   pinMode(PIN_TRIG, OUTPUT);
   pinMode(PIN_ECHO, INPUT);
-  pinMode(PIN_IR, INPUT);
   pinMode(PIN_SW, INPUT_PULLUP);
   for (int p : SPARE) pinMode(p, INPUT_PULLUP);
   pinMode(PIN_LED, OUTPUT);
@@ -260,8 +259,8 @@ void loop() {
   bool accOk = adxlOk && readAccel(ax, ay, az);
   float total = sqrtf(ax * ax + ay * ay + az * az);
 
-  Serial.printf("{\"ms\":%lu,\"d\":%ld,\"ir\":%d,\"jx\":%d,\"jy\":%d,\"sw\":%d,\"acc\":%d,\"ax\":%.3f,\"ay\":%.3f,\"az\":%.3f,\"al\":%d,\"alcm\":%d,\"p\":{",
-                now, distanceCm, digitalRead(PIN_IR), analogRead(PIN_JOY_X), analogRead(PIN_JOY_Y), swNow, accOk ? 1 : 0, ax, ay, az, alarmOn ? 1 : 0, alarmCm);
+  Serial.printf("{\"ms\":%lu,\"d\":%ld,\"jx\":%d,\"jy\":%d,\"sw\":%d,\"acc\":%d,\"ax\":%.3f,\"ay\":%.3f,\"az\":%.3f,\"al\":%d,\"alcm\":%d,\"p\":{",
+                now, distanceCm, analogRead(PIN_JOY_X), analogRead(PIN_JOY_Y), swNow, accOk ? 1 : 0, ax, ay, az, alarmOn ? 1 : 0, alarmCm);
   for (size_t i = 0; i < sizeof(SPARE) / sizeof(SPARE[0]); i++) Serial.printf("%s\"%d\":%d", i ? "," : "", SPARE[i], digitalRead(SPARE[i]));
   Serial.println("}}");
 

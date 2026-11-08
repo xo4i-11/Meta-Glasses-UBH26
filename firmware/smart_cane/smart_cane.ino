@@ -3,8 +3,7 @@
  *
  * Everything on the cane:
  *   HC-SR04 ultrasonic -> distance beeps (faster + higher = closer)       works with NO network
- *   IR sensor at the tip, pointing down -> hole / drop-off alarm          works with NO network
- *   ADXL345 -> cane fell and lies still -> 10 s countdown -> SOS          countdown local, SOS needs WiFi
+ *   ADXL345 -> cane fell and lies still -> siren + 5 s to press -> SOS    countdown local, SOS needs WiFi
  *   Joystick -> describe / read / ask / repeat / auto on-off / SOS        sent to the phone app via backend
  *   Speaker (through a transistor) + OLED status screen
  *
@@ -18,11 +17,10 @@
  *           "Adafruit SSD1306" + "Adafruit GFX Library"
  *
  * Wiring (see docs/wiring.html). SuperMini top view, USB-C up:
- *   LEFT header  (5, 6, 7, 8, 9, 10, 20, 21):  6 SDA · 7 SCL · 10 IR · 20 TRIG · 21 ECHO
+ *   LEFT header  (5, 6, 7, 8, 9, 10, 20, 21):  6 SDA · 7 SCL · 20 TRIG · 21 ECHO  (5, 10 free)
  *   RIGHT header (5V, G, 3.3, 4, 3, 2, 1, 0):  4 speaker · 3 joystick SW · 1 VRy · 0 VRx
  *
  *   HC-SR04   VCC->5V  GND->G  TRIG->20  ECHO->1k->21, and 21->2k->G      (ECHO is 5 V: divider!)
- *   IR        VCC->3.3  GND->G  OUT->10        (at the tip, pointing down, LED on at 5-10 cm)
  *   Joystick  "+5V" pin->3.3 (NOT 5V)  GND->G  VRx->0  VRy->1  SW->3
  *   ADXL345   VCC->3.3  GND->G  CS->3.3  SDO->G  SDA->6  SCL->7   (Y arrow along the shaft)
  *   OLED      VCC->3.3  GND->G  SDA->6  SCL->7
@@ -48,22 +46,19 @@ const char *APP_TOKEN = "";                   // same as backend APP_TOKEN (empt
 
 #define USE_OLED 1
 #define USE_IMU 1
-#define USE_HOLE_SENSOR 0  // 0 = no IR obstacle sensor fitted (a PIR motion sensor will NOT work here)
-#define IR_ACTIVE_LOW 1  // most IR modules pull OUT low when they see a surface
 #define CANE_AXIS 1      // ADXL axis that runs ALONG the shaft: 0 = X, 1 = Y, 2 = Z
 
 // ============================================================================= PINS
 // Right header: 4 speaker, 3 joystick button, 1 joystick Y, 0 joystick X
 const int PIN_SPK = 4, PIN_SW = 3, PIN_JOY_Y = 1, PIN_JOY_X = 0;
-// Left header: 6 SDA, 7 SCL, 10 IR, 20 TRIG, 21 ECHO (through the 1k/2k divider)
-const int PIN_SDA = 6, PIN_SCL = 7, PIN_IR = 10, PIN_TRIG = 20, PIN_ECHO = 21;
+// Left header: 6 SDA, 7 SCL, 20 TRIG, 21 ECHO (through the 1k/2k divider)
+const int PIN_SDA = 6, PIN_SCL = 7, PIN_TRIG = 20, PIN_ECHO = 21;
 const int PIN_LED = 8;  // on-board blue LED, active LOW
 const uint8_t ADXL = 0x53;
 
 // ============================================================================= TUNING
 int alertCm = 60;            // start beeping below this (150 = early warning when walking)
 const int SOLID_CM = 15;     // continuous tone below this
-const unsigned long HOLE_CONFIRM_MS = 120;
 const unsigned long SOS_HOLD_MS = 3000;
 const unsigned long COUNTDOWN_MS = 5000;  // fall -> locator siren -> SOS if nobody presses the joystick
 const float IMPACT_G = 2.5f;
@@ -75,7 +70,6 @@ bool autoMode = true;       // mirrors the phone's auto announcements (shown on 
 bool pendingSos = false;    // SOS waiting for the network
 String pendingReason = "";
 long distanceCm = -1;
-bool hole = false;
 String lastAction = "starting";
 
 // Declared before any function: the Arduino IDE inserts prototypes above the first function.
@@ -89,7 +83,7 @@ bool oledOk = false;
 #endif
 
 // ============================================================================= SOUND
-// Priority: alarms (countdown, find, hole) > phone tones > distance beeps.
+// Priority: alarms (fall countdown, SOS, find) > phone tones > distance beeps.
 unsigned currentFreq = 0;
 void spk(unsigned f) {
   if (f == currentFreq) return;
@@ -143,9 +137,7 @@ void runSound(unsigned long now) {
     }
     return;
   }
-  // 3) hole: low warble
-  if (hole) { spk((now / 150) % 2 ? 300 : 450); return; }
-  // 4) distance: closer = higher + faster
+  // 3) distance: closer = higher + faster
   if (distanceCm <= 0 || distanceCm >= alertCm) { spk(0); distOn = false; return; }
   unsigned f = map(constrain(distanceCm, SOLID_CM, alertCm), SOLID_CM, alertCm, 2000, 700);
   if (distanceCm <= SOLID_CM) { spk(f); return; }
@@ -229,8 +221,6 @@ long median3(long a, long b, long c) {
   if ((b <= a && a <= c) || (c <= a && a <= b)) return a;
   return c;
 }
-
-bool irSeesFloor() { return IR_ACTIVE_LOW ? digitalRead(PIN_IR) == LOW : digitalRead(PIN_IR) == HIGH; }
 
 #if USE_IMU
 bool imuOk = false;
@@ -369,7 +359,6 @@ void draw() {
   oled.setCursor(0, 16);
   if (mode == COUNTDOWN) { oled.print("FALL "); oled.print((COUNTDOWN_MS - min(COUNTDOWN_MS, millis() - modeSince)) / 1000 + 1); }
   else if (mode == SOS_SENT) oled.print("SOS");
-  else if (hole) oled.print("HOLE!");
   else if (distanceCm < 0) oled.print("---");
   else { oled.print(distanceCm); oled.setTextSize(1); oled.print(" cm"); }
   oled.setTextSize(1);
@@ -383,13 +372,12 @@ void draw() {
 
 long distBuf[3] = {-1, -1, -1};
 int distIdx = 0;
-unsigned long lastDist = 0, lastTele = 0, lastDraw = 0, lastImu = 0, noFloorSince = 0;
+unsigned long lastDist = 0, lastTele = 0, lastDraw = 0, lastImu = 0;
 
 void setup() {
   Serial.begin(115200);
   pinMode(PIN_TRIG, OUTPUT);
   pinMode(PIN_ECHO, INPUT);
-  pinMode(PIN_IR, INPUT);
   pinMode(PIN_SW, INPUT_PULLUP);
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, HIGH);
@@ -434,19 +422,6 @@ void loop() {
     distanceCm = median3(distBuf[0], distBuf[1], distBuf[2]);
   }
 
-  // Hole: the floor under the tip disappeared for > 120 ms
-  if (USE_HOLE_SENSOR && !irSeesFloor()) { if (!noFloorSince) noFloorSince = now; }
-  else noFloorSince = 0;
-  bool nowHole = noFloorSince && now - noFloorSince > HOLE_CONFIRM_MS && mode == NORMAL;
-  if (nowHole != hole) {
-    hole = nowHole;
-    JsonDocument d;
-    d["t"] = "hole";
-    d["on"] = hole;
-    sendJson(d);
-    if (hole) lastAction = "hole / drop-off";
-  }
-
 #if USE_IMU
   if (now - lastImu >= 10) { lastImu = now; runFallLogic(now); }
   if (mode == COUNTDOWN && now - modeSince >= COUNTDOWN_MS) {
@@ -466,7 +441,6 @@ void loop() {
     JsonDocument d;
     d["t"] = "tele";
     d["d"] = distanceCm;
-    d["hole"] = hole;
     d["auto"] = autoMode;
     sendJson(d);
     digitalWrite(PIN_LED, wsUp ? LOW : HIGH);  // on-board LED lit = connected to backend

@@ -149,15 +149,6 @@ c.wire([(290, 125), (290, 265), (220, 265)], "i2c")
 c.wire([(290, 125), (220, 125)], "i2c")
 c.dot(290, L["7"], "i2c")
 
-# ---- left: IR on 10
-c.box(80, 335, 140, 66, "IR sensor", None, caption="at the tip, pointing DOWN")
-c.pin(220, L["10"], "OUT", "R")
-c.pin(80, 360, "VCC", "L")
-c.tag(80, 360, "p33", "L")
-c.pin(80, 384, "GND", "L")
-c.tag(80, 384, "gnd", "L")
-lw([(LX, L["10"]), (220, L["10"])], "sig")
-
 # ---- left: HC-SR04, TRIG 20, ECHO 21 through the divider
 c.box(80, 440, 140, 110, "HC-SR04", "ultrasonic", caption="on the shaft, facing forward")
 c.pin(220, 470, "TRIG", "R")
@@ -246,7 +237,7 @@ for i, (t, s2) in enumerate([("Cane ⇄ phone relay", "WebSocket"), ("Gemini", "
 a.add('<rect class="island" x="674" y="30" width="262" height="320" rx="12"/>')
 a.text(694, 54, "CANE", "t-island", "start")
 a.box(694, 68, 222, 62, "ESP32-C3 SuperMini", "all the hardware")
-for i, line in enumerate(["ultrasonic → distance beeps", "IR → hole alarm", "ADXL345 → fall → SOS", "joystick → app commands", "speaker + OLED", "beeps work with no network"]):
+for i, line in enumerate(["ultrasonic → distance beeps", "ADXL345 → fall → siren → SOS", "joystick → app commands", "speaker + OLED", "beeps work with no network"]):
     a.text(805, 162 + i * 22, line, "t-note")
 
 arrow(286, 264, 380, 264, both=True)
@@ -370,8 +361,7 @@ svg text { fill: var(--fg); }
       <thead><tr><th>Part</th><th>Job</th><th>Works without internet?</th></tr></thead>
       <tbody>
         <tr><td>Cane: ultrasonic</td><td>Beeps faster and higher as obstacles get closer; solid tone under 30 cm</td><td>Yes</td></tr>
-        <tr><td>Cane: IR</td><td>Low warble when the floor disappears under the tip (hole, stairs down, curb)</td><td>Yes</td></tr>
-        <tr><td>Cane: ADXL345</td><td>Cane falls and lies still → 10 s countdown → SOS. Picking the cane up cancels it.</td><td>Countdown yes, SOS needs WiFi</td></tr>
+        <tr><td>Cane: ADXL345</td><td>Cane falls and lies still → locator siren → 5 s to press the joystick → SOS with GPS. Picking the cane up or any joystick move cancels it.</td><td>Countdown yes, SOS needs WiFi</td></tr>
         <tr><td>Phone: YOLO</td><td>Runs on every frame and announces what it sees every 5–10 s. Warns instantly if something is close in front.</td><td>Yes</td></tr>
         <tr><td>Phone: Gemini</td><td>Only when the joystick asks: describe, read text, answer a question</td><td>No</td></tr>
         <tr><td>Phone: SOS</td><td>Texts the caregiver with a Google Maps link and shows a red alert on the dashboard</td><td>Needs cell signal</td></tr>
@@ -410,7 +400,7 @@ svg text { fill: var(--fg); }
 
     <div class="warn prose">
       <strong>Two rules that protect the board</strong>
-      <p>1. Never put 5 V into a GPIO. The HC-SR04's ECHO pin outputs 5 V, so it goes through the 1 kΩ + 2 kΩ divider. Power the joystick, IR, ADXL345 and OLED from <code>3.3</code>, not <code>5V</code>.</p>
+      <p>1. Never put 5 V into a GPIO. The HC-SR04's ECHO pin outputs 5 V, so it goes through the 1 kΩ + 2 kΩ divider. Power the joystick, ADXL345 and OLED from <code>3.3</code>, not <code>5V</code>.</p>
       <p>2. Never wire the speaker straight to a GPIO. A 4–8 Ω speaker would pull about 400 mA and burn the pin, which can supply about 40 mA. The transistor does the heavy lifting.</p>
     </div>
 
@@ -423,7 +413,7 @@ svg text { fill: var(--fg); }
           <tr><td class="pinc">7</td><td>SCL of ADXL345 + OLED</td></tr>
           <tr><td class="pinc">8</td><td class="muted">blue LED, leave free</td></tr>
           <tr><td class="pinc">9</td><td class="muted">BOOT button, leave free</td></tr>
-          <tr><td class="pinc">10</td><td>IR sensor OUT</td></tr>
+          <tr><td class="pinc">10</td><td>free</td></tr>
           <tr><td class="pinc">20</td><td>HC-SR04 TRIG</td></tr>
           <tr><td class="pinc">21</td><td>HC-SR04 ECHO through 1 kΩ, plus 2 kΩ from 21 to GND</td></tr>
         </tbody>
@@ -433,7 +423,7 @@ svg text { fill: var(--fg); }
         <tbody>
           <tr><td class="pinc">5V</td><td>HC-SR04 VCC, speaker (via 22 Ω), 100 µF +</td></tr>
           <tr><td class="pinc">G</td><td>every GND</td></tr>
-          <tr><td class="pinc">3.3</td><td>ADXL345 VCC + CS, OLED, IR, joystick “+5V”</td></tr>
+          <tr><td class="pinc">3.3</td><td>ADXL345 VCC + CS, OLED, joystick “+5V”</td></tr>
           <tr><td class="pinc">4</td><td>speaker: 1 kΩ → NPN base</td></tr>
           <tr><td class="pinc">3</td><td>joystick SW</td></tr>
           <tr><td class="pinc">2</td><td class="muted">boot pin, leave free</td></tr>
@@ -446,7 +436,6 @@ svg text { fill: var(--fg); }
       <thead><tr><th>Part</th><th>Where it goes on the cane</th></tr></thead>
       <tbody>
         <tr><td>HC-SR04</td><td>On the shaft at about knee height, facing forward</td></tr>
-        <tr><td>IR sensor</td><td>5–10 cm above the tip, pointing at the floor. Turn its pot until the LED is on over the floor and off over a table edge.</td></tr>
         <tr><td>Joystick</td><td>Under your thumb on the handle. If directions come out rotated, swap them in <code>pollJoystick()</code>.</td></tr>
         <tr><td>ADXL345</td><td>Y arrow along the shaft (or change <code>CANE_AXIS</code>)</td></tr>
         <tr><td>OLED</td><td>On the handle, facing up, so judges can read it</td></tr>
@@ -476,9 +465,9 @@ svg text { fill: var(--fg); }
     <h3>Bring-up order</h3>
     <ul class="notes">
       <li>Flash with <strong>USB CDC On Boot: Enabled</strong> and open the Serial Monitor at 115200.</li>
-      <li>Wire and test one part at a time: speaker, then ultrasonic, IR, joystick, ADXL345, OLED. Use <code>firmware/hardware_test</code>: type one letter in the Serial Monitor to test each part.</li>
+      <li>Wire and test one part at a time: speaker, then ultrasonic, joystick, ADXL345, OLED. Use <code>firmware/hardware_test</code>: type one letter in the Serial Monitor to test each part.</li>
       <li>Set <code>WIFI_SSID</code>, <code>WIFI_PASS</code> and <code>BACKEND_HOST</code>. The blue on-board LED lights when the cane reaches the server.</li>
-      <li>Fall test: lay the cane flat on the floor with a thump. It should wait about 4 s, count down for 10 s, then send an SOS. Picking it up cancels.</li>
+      <li>Fall test: lay the cane flat on the floor with a thump. The siren should start after about 2 s, then the SOS goes out 5 s later. Pressing or moving the joystick, or picking the cane up, cancels it.</li>
     </ul>
   </section>
 </div>

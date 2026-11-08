@@ -26,7 +26,7 @@ async def main():
         await recv_until(phone, lambda m: m.get("t") == "status" and m.get("cane"))
         print("phone sees cane connected")
         await phone.send(json.dumps({"t": "loc", "lat": 43.47, "lon": -80.54}))
-        await cane.send(json.dumps({"t": "tele", "d": 60, "hole": False, "auto": True}))
+        await cane.send(json.dumps({"t": "tele", "d": 60, "auto": True}))
         print("dashboard live:", (await recv_until(dash, lambda m: m.get("type") == "live" and "distance_cm" in m["data"]))["data"])
         await cane.send(json.dumps({"t": "btn", "b": "describe"}))
         print("phone got:", await recv_until(phone, lambda m: m.get("t") == "btn"))

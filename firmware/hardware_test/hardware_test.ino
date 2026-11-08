@@ -8,7 +8,6 @@
  *   b  board check (blinks the blue LED 3x)
  *   p  speaker: plays a rising sweep, then 3 beeps
  *   u  ultrasonic: prints distance 5x per second
- *   i  IR: prints FLOOR / NO FLOOR (hole)
  *   j  joystick: prints X, Y (0-4095) and button
  *   s  I2C scan: should find 0x53 (ADXL345) and 0x3C (OLED)
  *   a  accelerometer: prints x, y, z in g and the total (about 1.00 when still)
@@ -22,8 +21,8 @@
 
 // Right header: 4 speaker, 3 joystick button, 1 joystick Y, 0 joystick X
 const int PIN_SPK = 4, PIN_SW = 3, PIN_JOY_Y = 1, PIN_JOY_X = 0;
-// Left header: 6 SDA, 7 SCL, 10 IR, 20 TRIG, 21 ECHO (through the 1k/2k divider)
-const int PIN_SDA = 6, PIN_SCL = 7, PIN_IR = 10, PIN_TRIG = 20, PIN_ECHO = 21;
+// Left header: 6 SDA, 7 SCL, 20 TRIG, 21 ECHO (through the 1k/2k divider)
+const int PIN_SDA = 6, PIN_SCL = 7, PIN_TRIG = 20, PIN_ECHO = 21;
 const int PIN_LED = 8;
 const uint8_t ADXL = 0x53;
 
@@ -34,7 +33,7 @@ unsigned long lastPrint = 0;
 void menu() {
   Serial.println();
   Serial.println(F("=== Smart Eyes hardware test ==="));
-  Serial.println(F("b board  p speaker  u ultrasonic  i IR  j joystick"));
+  Serial.println(F("b board  p speaker  u ultrasonic  j joystick"));
   Serial.println(F("s I2C scan  a accelerometer  o OLED  x stop"));
 }
 
@@ -61,7 +60,6 @@ void setup() {
   delay(1500);  // give the USB serial time to connect
   pinMode(PIN_TRIG, OUTPUT);
   pinMode(PIN_ECHO, INPUT);
-  pinMode(PIN_IR, INPUT);
   pinMode(PIN_SW, INPUT_PULLUP);
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, HIGH);
@@ -116,7 +114,6 @@ void loop() {
         live = 'a';
         break;
       case 'u': Serial.println(F("Ultrasonic live: move your hand in front. -1 = nothing in range / ECHO not wired (x to stop)")); live = 'u'; break;
-      case 'i': Serial.println(F("IR live: hold over the floor, then over a table edge (x to stop)")); live = 'i'; break;
       case 'j': Serial.println(F("Joystick live: centre ~2048, push each way, press the stick (x to stop)")); live = 'j'; break;
       case 'x': Serial.println(F("stopped")); break;
       default: menu();
@@ -126,7 +123,6 @@ void loop() {
   if (live && millis() - lastPrint > 200) {
     lastPrint = millis();
     if (live == 'u') Serial.printf("distance: %ld cm\n", distanceCm());
-    if (live == 'i') Serial.println(digitalRead(PIN_IR) == LOW ? "IR: FLOOR (surface seen)" : "IR: NO FLOOR  <- hole");
     if (live == 'j') {
       int x = analogRead(PIN_JOY_X), y = analogRead(PIN_JOY_Y);
       const char *dir = y < 700 ? "UP" : y > 3400 ? "DOWN" : x < 700 ? "LEFT" : x > 3400 ? "RIGHT" : "centre";

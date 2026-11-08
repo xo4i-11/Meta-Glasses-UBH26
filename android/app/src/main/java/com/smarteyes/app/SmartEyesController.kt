@@ -36,7 +36,6 @@ data class UiState(
     val serverUp: Boolean = false,
     val caneOnline: Boolean = false,
     val distanceCm: Int = -1,
-    val hole: Boolean = false,
     val autoAnnounce: Boolean = true,
     val announceSeconds: Int = 7,
     val yoloReady: Boolean = false,
@@ -55,7 +54,7 @@ data class UiState(
  *  - YOLO runs on every camera frame (on the phone, offline). It announces what it sees every
  *    5-10 s and warns instantly about something big right ahead. The cane's joystick turns this on/off.
  *  - Gemini runs ONLY when the joystick asks (describe / read / ask).
- *  - The cane's own beeps (distance, holes) never depend on this app.
+ *  - The cane's own beeps (distance, fall siren) never depend on this app.
  */
 class SmartEyesController(private val context: Context) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -173,8 +172,7 @@ class SmartEyesController(private val context: Context) {
 
   private fun onCane(e: CaneEvent) {
     when (e) {
-      is CaneEvent.Telemetry -> _ui.update { it.copy(distanceCm = e.distanceCm, hole = e.hole) }
-      is CaneEvent.Hole -> if (e.on) voice.warn("Hole ahead, stop")
+      is CaneEvent.Telemetry -> _ui.update { it.copy(distanceCm = e.distanceCm) }
       is CaneEvent.Button ->
           when (e.name) {
             "describe" -> describe()

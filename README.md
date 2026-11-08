@@ -149,7 +149,7 @@ ESP32-C3 SuperMini (top view, USB-C up):
 | 7 | SCL (ADXL345 + OLED) | 3.3 | ADXL345 VCC + CS, OLED, joystick "+5V" |
 | 8 | leave free (blue LED) | 4 | speaker: 1 kΩ → NPN base |
 | 9 | leave free (BOOT) | 3 | joystick SW |
-| 10 | IR sensor OUT (disabled in firmware) | 2 | leave free (boot pin) |
+| 10 | free | 2 | leave free (boot pin) |
 | 20 | HC-SR04 TRIG | 1 | joystick VRy |
 | 21 | HC-SR04 ECHO via 1 kΩ (+ 2 kΩ from 21 to G) | 0 | joystick VRx |
 
@@ -165,7 +165,6 @@ Full diagram: [docs/wiring.html](docs/wiring.html).
 Firmware settings (top of `smart_cane.ino`):
 - `alertCm = 60`: start beeping below 60 cm.
 - `SOLID_CM = 15`: solid tone below 15 cm.
-- `USE_HOLE_SENSOR 0`: the IR hole sensor is disabled because it was unreliable.
 - `COUNTDOWN_MS = 5000`: fall countdown.
 
 The firmware prints `[wifi] …` status lines over USB serial.
@@ -227,7 +226,7 @@ JSON over `ws://<backend>/ws/device?role=cane|phone&token=…`. The backend rela
 
 | Direction | Messages |
 |---|---|
-| cane → phone | `{"t":"tele","d":123,"hole":false,"auto":true}` (4×/s) · `{"t":"btn","b":"describe\|read\|ask\|repeat\|auto"}` · `{"t":"fall"}` · `{"t":"cancel"}` · `{"t":"sos","reason":"…"}` (the backend attaches the phone's last `lat`/`lon`) |
+| cane → phone | `{"t":"tele","d":123,"auto":true}` (4×/s) · `{"t":"btn","b":"describe\|read\|ask\|repeat\|auto"}` · `{"t":"fall"}` · `{"t":"cancel"}` · `{"t":"sos","reason":"…"}` (the backend attaches the phone's last `lat`/`lon`) |
 | phone → cane | `{"t":"tone","f":2400,"n":3,"on":80,"off":60}` · `{"t":"find"}` (locator siren) · `{"t":"auto","on":false}` · `{"t":"cfg","th":60}` |
 | phone → backend | `{"t":"loc","lat":…,"lon":…}` every 30 s |
 
@@ -244,7 +243,7 @@ HTTP API: `/api/describe` (multipart image + mode), `/api/tts`, `/api/events`, `
 | Cane → Wi-Fi → backend → phone | ✅ Live distance in the app; joystick describe/read work |
 | SOS button (hold 3 s) → SMS with GPS | ✅ App reported the text sent with a fresh location; cancel from the joystick works |
 | Fall → siren → 5 s → SOS | 🔶 Flashed, not yet drop-tested |
-| Hole sensor (IR) | ⛔ Disabled (unreliable). Idea: a 2nd HC-SR04 pointing down |
+| Hole / drop-off detection | ⛔ Removed. The IR module was unreliable and has been taken off the cane. Idea for later: a 2nd HC-SR04 pointing down (pins 5 + 10 are free) |
 
 ## Limits and privacy
 - Smart Eyes is an **assistant, not a certified safety device**. Keep using standard cane technique.

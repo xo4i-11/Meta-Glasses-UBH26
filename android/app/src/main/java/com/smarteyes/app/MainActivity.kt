@@ -207,7 +207,7 @@ class MainActivity : ComponentActivity() {
 
   @Composable
   private fun Status(s: UiState, reg: RegistrationState?) {
-    val dist = if (s.hole) "HOLE" else if (s.distanceCm < 0) "clear" else "${s.distanceCm} cm"
+    val dist = if (s.distanceCm < 0) "clear" else "${s.distanceCm} cm"
     val lines =
         listOf(
             "Glasses: ${if (s.usingPhoneCamera) "phone camera" else s.glasses} (${reg?.toString()?.lowercase() ?: "…"})",

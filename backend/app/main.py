@@ -293,9 +293,9 @@ async def log_event(**fields) -> dict:
 
 async def handle_cane(msg: dict) -> None:
     t = msg.get("t")
-    if t == "tele":  # ~4 Hz: distance, hole, auto mode
+    if t == "tele":  # ~4 Hz: distance, auto mode
         d = msg.get("d", -1)
-        await hub.broadcast({"type": "live", "data": {"distance_cm": d, "hole": bool(msg.get("hole")), "auto": msg.get("auto")}})
+        await hub.broadcast({"type": "live", "data": {"distance_cm": d, "auto": msg.get("auto")}})
         await devices.send(devices.phones, msg)
         if isinstance(d, (int, float)) and 0 < d <= 80 and not devices.cane_close:
             devices.cane_close = True
@@ -305,9 +305,7 @@ async def handle_cane(msg: dict) -> None:
         return
 
     loc = devices.phone_loc or {}
-    if t == "hole" and msg.get("on"):
-        await log_event(kind="hazard", label="hole / drop-off ahead", source="cane-ir", lat=loc.get("lat"), lon=loc.get("lon"))
-    elif t == "btn":
+    if t == "btn":
         await hub.broadcast({"type": "button", "data": {"b": msg.get("b"), "ts": now_iso()}})
     elif t == "fall":
         await log_event(kind="fall", label="cane down, counting down to SOS", source="cane-imu", lat=loc.get("lat"), lon=loc.get("lon"))

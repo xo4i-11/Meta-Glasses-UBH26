@@ -46,7 +46,6 @@ const char *APP_TOKEN = "";                   // same as backend APP_TOKEN (empt
 
 #define USE_OLED 1
 #define USE_IMU 1
-#define CANE_AXIS 1      // ADXL axis that runs ALONG the shaft: 0 = X, 1 = Y, 2 = Z
 
 // ============================================================================= PINS
 // Right header: 4 speaker, 3 joystick button, 1 joystick Y, 0 joystick X
@@ -61,7 +60,13 @@ int alertCm = 60;            // start beeping below this (150 = early warning wh
 const int SOLID_CM = 15;     // continuous tone below this
 const unsigned long SOS_HOLD_MS = 3000;
 const unsigned long COUNTDOWN_MS = 5000;  // fall -> locator siren -> SOS if nobody presses the joystick
-const float IMPACT_G = 2.5f;
+// Fall = the cane lies still, tilted far from its upright direction.
+// UPRIGHT_* = gravity measured with this cane held as when walking (re-measure if the board is re-mounted).
+// Measured 2026-11-08: upright (-0.06,-0.73,+0.67), lying on the floor (-0.06,-0.14,+0.97) -> 41 deg apart;
+// walking stayed within ~20 deg, so 28 deg splits them.
+const float UPRIGHT_X = -0.06f, UPRIGHT_Y = -0.73f, UPRIGHT_Z = 0.67f;
+const float FLAT_TILT_DEG = 28.0f;      // this far from upright counts as lying down
+const unsigned long FLAT_MS = 2000;     // ...still for this long -> siren + countdown
 
 // ============================================================================= STATE
 WebSocketsClient ws;
@@ -249,37 +254,47 @@ void readImu() {
   gMag = sqrtf(ax * ax + ay * ay + az * az);
 }
 
-float shaftG() { return fabsf(CANE_AXIS == 0 ? ax : CANE_AXIS == 1 ? ay : az); }
-bool lyingFlat() { return shaftG() < 0.5f && gMag > 0.8f && gMag < 1.2f; }
-bool upright() { return shaftG() > 0.7f; }
+// Lying still more than FLAT_TILT_DEG from upright for 2 s -> siren + 5 s to press -> SOS.
+// ponytail: tight margin (walking ~20, floor ~41 deg); if it false-alarms or misses, re-measure UPRIGHT_*.
+bool armed = true;                  // after an alarm, wait until it is picked up again
+unsigned long lastMoveAt = 0, flatSince = 0, movingSince = 0;
 
-// Cane fell (>2.5 g) -> settle 0.8 s -> lying flat & still 1.2 s -> siren + 5 s to press -> SOS
-unsigned long stillSince = 0, uprightSince = 0;
+float tiltDeg() {
+  float r = sqrtf(UPRIGHT_X * UPRIGHT_X + UPRIGHT_Y * UPRIGHT_Y + UPRIGHT_Z * UPRIGHT_Z);
+  if (gMag < 0.01f) return 0;
+  float c = (ax * UPRIGHT_X + ay * UPRIGHT_Y + az * UPRIGHT_Z) / (r * gMag);
+  return acosf(constrain(c, -1.0f, 1.0f)) * 57.2958f;
+}
+
 void runFallLogic(unsigned long now) {
   if (!imuOk) return;
   readImu();
-  bool still = gMag > 0.85f && gMag < 1.15f;
-  if (mode == NORMAL && gMag > IMPACT_G) { setMode(IMPACT); stillSince = 0; }
-  if (mode == IMPACT) {
-    if (now - modeSince < 800) return;  // let it bounce
-    if (lyingFlat() && still) {
-      if (!stillSince) stillSince = now;
-      if (now - stillSince > 1200) {  // lying flat & still -> it really fell
+  bool still = fabsf(gMag - 1.0f) < 0.12f;
+  if (!still) lastMoveAt = now;
+  bool inUse = now - lastMoveAt < 1000;  // moved within the last second: someone is carrying it
+  float tilt = tiltDeg();
+  if (tilt < 15.0f) armed = true;  // back near upright
+
+  if (mode == NORMAL && armed) {
+    if (!inUse && tilt > FLAT_TILT_DEG) {
+      if (!flatSince) flatSince = now;
+      if (now - flatSince > FLAT_MS) {  // lying flat & still -> it fell
+        armed = false; flatSince = 0;
         setMode(COUNTDOWN);
         lastAction = "FALL? press to cancel";
         sendSimple("fall");
       }
-    } else stillSince = 0;
-    if (now - modeSince > 8000) setMode(NORMAL);  // it got picked up / was just a knock
+    } else flatSince = 0;
   }
-  // Picked back up during countdown / siren -> user is fine
+  // Picked back up during countdown / siren (moving for 0.7 s) -> user is fine
   if (mode == COUNTDOWN || mode == FIND) {
-    if (upright() && !still) { if (!uprightSince) uprightSince = now; }
-    else uprightSince = 0;
-    if (uprightSince && now - uprightSince > 700) {
+    if (!still) { if (!movingSince) movingSince = now; }
+    else if (now - lastMoveAt > 200) movingSince = 0;
+    if (movingSince && now - movingSince > 700) {
       if (mode == COUNTDOWN) sendSimple("cancel");
       setMode(NORMAL);
       lastAction = "picked up";
+      movingSince = 0;
     }
   }
 }

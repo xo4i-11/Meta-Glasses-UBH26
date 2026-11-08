@@ -92,6 +92,7 @@ class SmartEyesController(private val context: Context) {
   private var lastMemoryLog = 0L
   private var lastMemoryText = ""
   private var fallFailsafe: Job? = null
+  private var lastSosAt = -SOS_DEDUPE_MS
 
   fun start() {
     if (started) return
@@ -316,8 +317,14 @@ class SmartEyesController(private val context: Context) {
   fun testSos() = sendSos("TEST from the Smart Eyes app (no emergency)", null, null)
 
   /** Email to the caregiver with a fresh GPS fix (Google Maps link); the server also logs it for the dashboard. */
-  private fun sendSos(reason: String, caneLat: Double?, caneLon: Double?) =
-      scope.launch {
+  private fun sendSos(reason: String, caneLat: Double?, caneLon: Double?) {
+    // One fall = one email, even if the same SOS arrives twice (two relay sockets, cane resend).
+    if (!reason.startsWith("TEST")) synchronized(this) {
+      val now = SystemClock.elapsedRealtime()
+      if (now - lastSosAt < SOS_DEDUPE_MS) return
+      lastSosAt = now
+    }
+    scope.launch {
         _ui.update { it.copy(alarm = "Sending SOS…") }
         val loc = pointing.freshLocation(4000)
         val lat = loc?.latitude ?: caneLat
@@ -327,6 +334,7 @@ class SmartEyesController(private val context: Context) {
         voice.warn(if (reason.startsWith("TEST")) status else "Help is on the way. $status")
         log("🆘 $reason · $status · ${if (lat != null) "%.5f, %.5f".format(lat, lon) else "no location"}")
       }
+  }
 
   fun findCane() {
     cane.find()
@@ -401,5 +409,6 @@ class SmartEyesController(private val context: Context) {
   companion object {
     /** cane countdown (5 s) + Wi-Fi slack: if no SOS/cancel arrived by then, the phone sends it */
     private const val FALL_FAILSAFE_MS = 9000L
+    private const val SOS_DEDUPE_MS = 30_000L
   }
 }

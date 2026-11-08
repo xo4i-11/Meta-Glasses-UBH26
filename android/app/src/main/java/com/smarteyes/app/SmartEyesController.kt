@@ -79,6 +79,9 @@ class SmartEyesController(private val context: Context) {
   private val _ui = MutableStateFlow(UiState(caregiver = sos.caregiverNumber, serverUrl = backend.baseUrl))
   val ui: StateFlow<UiState> = _ui
 
+  /** Dev screen: latest frame + what YOLO found in it (boxes normalised 0..1). */
+  val preview = MutableStateFlow<Pair<Bitmap, List<Detection>>?>(null)
+
   @Volatile private var latestFrame: Bitmap? = null
   @Volatile private var latestDets: List<Detection> = emptyList()
   private val cloudBusy = AtomicBoolean(false)
@@ -146,6 +149,7 @@ class SmartEyesController(private val context: Context) {
     val dets = detector.detect(bmp)
     val ms = SystemClock.elapsedRealtime() - t0
     latestDets = dets
+    preview.value = bmp to dets
     _ui.update { it.copy(yoloMs = ms, yoloSeen = dets.sortedByDescending { d -> d.score }.take(4).joinToString { d -> "${d.label} ${(d.score * 100).toInt()}%" }) }
     logMemory(dets)
 
@@ -179,7 +183,8 @@ class SmartEyesController(private val context: Context) {
     when (e) {
       is CaneEvent.Telemetry -> _ui.update { it.copy(distanceCm = e.distanceCm, hole = e.hole) }
       is CaneEvent.Hole -> if (e.on) voice.warn("Hole ahead, stop")
-      is CaneEvent.Button ->
+      is CaneEvent.Button -> {
+          log("🕹 joystick: ${e.name}")
           when (e.name) {
             "describe" -> describe()
             "read" -> readText()
@@ -187,6 +192,7 @@ class SmartEyesController(private val context: Context) {
             "repeat" -> voice.say(voice.lastSaid.ifBlank { "Nothing said yet" })
             "auto" -> toggleAuto()
           }
+      }
       CaneEvent.FallCountdown -> {
         // The cane is already sounding its locator siren; it sends "sos" after 5 s unless the joystick is pressed
         _ui.update { it.copy(alarm = "Cane fell: press the joystick within 5 s to cancel") }
@@ -400,8 +406,13 @@ class SmartEyesController(private val context: Context) {
 
   private fun log(line: String) {
     Log.i("SmartEyes", line)
-    _ui.update { it.copy(log = (listOf(line) + it.log).take(40), lastSaid = voice.lastSaid) }
+    val t = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+    _ui.update { it.copy(log = (listOf("$t $line") + it.log).take(80), lastSaid = voice.lastSaid) }
   }
+
+  // ---- dev screen helpers
+  fun beepCane() { cane.tone(1500, 2, 120, 80); log("🔊 beep sent to cane") }
+  fun clearLog() = _ui.update { it.copy(log = emptyList()) }
 
   companion object {
     /** cane countdown (5 s) + Wi-Fi slack: if no SOS/cancel arrived by then, the phone sends it */

@@ -14,7 +14,10 @@ import com.smarteyes.app.net.Backend
 import com.smarteyes.app.sensors.Pointing
 import com.smarteyes.app.sos.SosSender
 import com.smarteyes.app.vision.Detection
+import com.smarteyes.app.vision.Det
 import com.smarteyes.app.vision.FrameUtils
+import com.smarteyes.app.vision.PATH_CLEAR
+import com.smarteyes.app.vision.describeLocal
 import com.smarteyes.app.vision.HazardEngine
 import com.smarteyes.app.vision.ObstacleDetector
 import java.util.concurrent.atomic.AtomicBoolean
@@ -210,11 +213,34 @@ class SmartEyesController(private val context: Context) {
 
   // ======================================================================== Gemini (on demand only)
 
-  fun describe() = cloudCall("describing") {
+  /**
+   * YOLO first: describe from the phone's own detections (instant, offline). Gemini is asked only when YOLO
+   * sees nothing confident; offline (or if Gemini fails) the honest "path appears clear" sentence is spoken.
+   */
+  fun describe() {
+    val local = describeLocal(latestDets.map { Det(it.label, it.score, it.box.centerX(), it.box.centerY(), it.box.width(), it.box.height()) })
+    if (local != null) {
+      hazards.noteSpoke()
+      voice.warn(local)
+      backend.postEvent(mapOf("kind" to "describe", "label" to local, "source" to "yolo", "latency_ms" to _ui.value.yoloMs))
+      log("👁 $local (YOLO, on-phone)")
+      return
+    }
+    describeWithGemini()
+  }
+
+  private fun describeWithGemini() = cloudCall("describing") {
     val t0 = System.currentTimeMillis()
     val frame = latestFrame ?: return@cloudCall voice.warn("No camera yet")
     val loc = pointing.lastLocation()
-    val r = backend.describe(FrameUtils.toJpeg(frame), "describe", lat = loc?.latitude, lon = loc?.longitude)
+    val r = try {
+      backend.describe(FrameUtils.toJpeg(frame), "describe", lat = loc?.latitude, lon = loc?.longitude)
+    } catch (e: Exception) {
+      if (e is kotlinx.coroutines.CancellationException) throw e
+      voice.warn(PATH_CLEAR)
+      log("👁 $PATH_CLEAR (offline)")
+      return@cloudCall
+    }
     hazards.noteSpoke()
     voice.say(r.text, requestedAtMs = t0)
     backend.postEvent(mapOf("kind" to "describe", "label" to r.text, "source" to "joystick", "latency_ms" to (System.currentTimeMillis() - t0)))

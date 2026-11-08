@@ -64,4 +64,5 @@ dependencies {
   implementation(libs.onnxruntime.android)
   implementation(libs.camerax.camera2)
   implementation(libs.camerax.lifecycle)
+  testImplementation(libs.junit)
 }

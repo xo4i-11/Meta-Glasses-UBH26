@@ -44,6 +44,7 @@ data class UiState(
     val announceSeconds: Int = 7,
     val yoloReady: Boolean = false,
     val yoloMs: Long = 0,
+    val yoloSeen: String = "", // dev screen: what YOLO sees in the latest frame
     val yoloEngine: String = "",
     val busy: String = "",
     val lastSaid: String = "",
@@ -145,7 +146,7 @@ class SmartEyesController(private val context: Context) {
     val dets = detector.detect(bmp)
     val ms = SystemClock.elapsedRealtime() - t0
     latestDets = dets
-    _ui.update { it.copy(yoloMs = ms) }
+    _ui.update { it.copy(yoloMs = ms, yoloSeen = dets.sortedByDescending { d -> d.score }.take(4).joinToString { d -> "${d.label} ${(d.score * 100).toInt()}%" }) }
     logMemory(dets)
 
     if (!_ui.value.autoAnnounce) return
@@ -229,7 +230,7 @@ class SmartEyesController(private val context: Context) {
     describeWithGemini()
   }
 
-  private fun describeWithGemini() = cloudCall("describing") {
+  fun describeWithGemini() = cloudCall("describing") {
     val t0 = System.currentTimeMillis()
     val frame = latestFrame ?: return@cloudCall voice.warn("No camera yet")
     val loc = pointing.lastLocation()

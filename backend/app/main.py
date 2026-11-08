@@ -97,6 +97,13 @@ class AskIn(BaseModel):
     question: str
 
 
+class SosIn(BaseModel):
+    to: str  # caregiver email
+    reason: str
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+
+
 # ---- routes -------------------------------------------------------------------------------
 
 
@@ -173,6 +180,45 @@ async def add_event(ev: EventIn):
     row = await run_in_threadpool(db.add_event, **ev.model_dump())
     await hub.broadcast({"type": "event", "data": row})
     return row
+
+
+def send_sos_email(to: str, reason: str, lat: Optional[float], lon: Optional[float]) -> None:
+    """Plain-text email via SMTP (STARTTLS). Raises on failure so the phone can say so honestly."""
+    import smtplib
+    from email.message import EmailMessage
+
+    if not (config.SMTP_USER and config.SMTP_PASS):
+        raise RuntimeError("email not set up on the server (SMTP_USER / SMTP_PASS)")
+    where = (
+        f"https://maps.google.com/?q={lat:.6f},{lon:.6f}\n(latitude {lat:.6f}, longitude {lon:.6f})"
+        if lat is not None and lon is not None
+        else "Location unknown (no GPS fix)."
+    )
+    msg = EmailMessage()
+    msg["Subject"] = ("[TEST] " if reason.startswith("TEST") else "") + "SMART EYES SOS: your person may need help"
+    msg["From"] = f"Smart Eyes <{config.SMTP_USER}>"
+    msg["To"] = to
+    msg.set_content(
+        f"Smart Eyes sent an SOS.\n\nWhat happened: {reason}\nTime: {time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n\n"
+        f"Where they are:\n{where}\n\nPlease check on them right away."
+    )
+    with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=12) as s:
+        s.starttls()
+        s.login(config.SMTP_USER, config.SMTP_PASS)
+        s.send_message(msg)
+
+
+@app.post("/api/sos", dependencies=[Depends(require_token)])
+async def sos(body: SosIn):
+    """Phone asks the server to email the caregiver (the phone has no SIM, so no SMS)."""
+    row = await run_in_threadpool(db.add_event, kind="sos", label=body.reason, source="phone", lat=body.lat, lon=body.lon)
+    await hub.broadcast({"type": "event", "data": row})
+    try:
+        await run_in_threadpool(send_sos_email, body.to, body.reason, body.lat, body.lon)
+    except Exception as e:
+        print(f"[sos] email failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=502, detail=f"email failed: {e}")
+    return {"ok": True}
 
 
 @app.post("/api/live", dependencies=[Depends(require_token)])

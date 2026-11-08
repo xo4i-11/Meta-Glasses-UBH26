@@ -22,4 +22,10 @@ DB_TABLE_PREFIX = os.getenv("DB_TABLE_PREFIX", "smarteyes_").strip()
 
 APP_TOKEN = os.getenv("APP_TOKEN", "").strip()
 
+# SOS email to the caregiver (Gmail: SMTP_USER = the address, SMTP_PASS = a 16-letter App Password)
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "").strip()
+SMTP_PASS = os.getenv("SMTP_PASS", "").replace(" ", "").strip()
+
 DASHBOARD_DIR = BACKEND_DIR.parent / "dashboard"

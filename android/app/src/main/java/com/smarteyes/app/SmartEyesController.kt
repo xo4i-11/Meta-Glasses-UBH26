@@ -69,7 +69,7 @@ class SmartEyesController(private val context: Context) {
   val glasses = GlassesCamera(context, scope)
   private val phoneCamera = PhoneCamera(context)
   val cane = CaneLink({ backend.baseUrl }, BuildConfig.APP_TOKEN)
-  private val sos = SosSender(context)
+  private val sos = SosSender(context, backend)
   private val listener = Listener(context)
   private val pointing = Pointing(context)
   private val detector by lazy { ObstacleDetector(context) }
@@ -77,7 +77,7 @@ class SmartEyesController(private val context: Context) {
 
   private val _ui =
       MutableStateFlow(
-          UiState(caregiver = sos.caregiverNumber, serverUrl = backend.baseUrl, showFeed = prefs.getBoolean("show_feed", true)))
+          UiState(caregiver = sos.caregiverEmail, serverUrl = backend.baseUrl, showFeed = prefs.getBoolean("show_feed", true)))
   val ui: StateFlow<UiState> = _ui
 
   // Only filled while the camera view is switched on, so a hidden view costs nothing.
@@ -308,14 +308,14 @@ class SmartEyesController(private val context: Context) {
     _ui.update { it.copy(announceSeconds = s) }
   }
 
-  fun setCaregiver(number: String) {
-    sos.caregiverNumber = number
-    _ui.update { it.copy(caregiver = sos.caregiverNumber) }
+  fun setCaregiver(email: String) {
+    sos.caregiverEmail = email
+    _ui.update { it.copy(caregiver = sos.caregiverEmail) }
   }
 
   fun testSos() = sendSos("TEST from the Smart Eyes app (no emergency)", null, null)
 
-  /** SMS to the caregiver with a fresh GPS fix (Google Maps link), plus a dashboard event. */
+  /** Email to the caregiver with a fresh GPS fix (Google Maps link); the server also logs it for the dashboard. */
   private fun sendSos(reason: String, caneLat: Double?, caneLon: Double?) =
       scope.launch {
         _ui.update { it.copy(alarm = "Sending SOS…") }
@@ -323,7 +323,6 @@ class SmartEyesController(private val context: Context) {
         val lat = loc?.latitude ?: caneLat
         val lon = loc?.longitude ?: caneLon
         val status = sos.send(reason, lat, lon)
-        backend.postEvent(mapOf("kind" to "sos", "label" to reason, "source" to "phone", "lat" to lat, "lon" to lon))
         _ui.update { it.copy(alarm = "SOS · $status") }
         voice.warn(if (reason.startsWith("TEST")) status else "Help is on the way. $status")
         log("🆘 $reason · $status · ${if (lat != null) "%.5f, %.5f".format(lat, lon) else "no location"}")

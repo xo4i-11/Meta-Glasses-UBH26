@@ -78,6 +78,17 @@ class Backend(@Volatile var baseUrl: String = BuildConfig.BACKEND_URL.trimEnd('/
         }
       }
 
+  /** Server emails the caregiver. Throws with the server's reason if the email could not be sent. */
+  suspend fun sos(to: String, reason: String, lat: Double?, lon: Double?) =
+      withContext(Dispatchers.IO) {
+        val o = JSONObject().put("to", to).put("reason", reason)
+        if (lat != null && lon != null) o.put("lat", lat).put("lon", lon)
+        val req = Request.Builder().url("$baseUrl/api/sos").post(o.toString().toRequestBody(json)).auth().build()
+        http.newCall(req).execute().use { resp ->
+          if (!resp.isSuccessful) throw IOException(runCatching { JSONObject(resp.body!!.string()).optString("detail") }.getOrNull() ?: "server ${resp.code}")
+        }
+      }
+
   suspend fun health(): Boolean =
       withContext(Dispatchers.IO) {
         runCatching { http.newCall(Request.Builder().url("$baseUrl/health").build()).execute().use { it.isSuccessful } }

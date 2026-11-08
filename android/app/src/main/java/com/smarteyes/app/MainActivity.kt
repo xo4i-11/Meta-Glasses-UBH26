@@ -115,7 +115,6 @@ class MainActivity : ComponentActivity() {
           Manifest.permission.CAMERA, // phone-camera fallback
           Manifest.permission.RECORD_AUDIO, // voice questions
           Manifest.permission.ACCESS_FINE_LOCATION, // SOS location + Sky Mode
-          Manifest.permission.SEND_SMS, // SOS text to caregiver
       )
 
   private val permissionLauncher =
@@ -239,14 +238,14 @@ class MainActivity : ComponentActivity() {
                   number = it
                   controller.setCaregiver(it)
                 },
-                label = { Text("Caregiver phone number (SOS text)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                label = { Text("Caregiver email (SOS)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth())
-            if (s.caregiver.isBlank()) Text("No number set: SOS can't text anyone yet.", color = Warn, fontSize = 14.sp)
+            if ("@" !in s.caregiver) Text("No email set: SOS can't reach anyone yet.", color = Warn, fontSize = 14.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              SmallButton("Test SOS text", Modifier.weight(1f), color = Bad) { controller.testSos() }
+              SmallButton("Test SOS email", Modifier.weight(1f), color = Bad) { controller.testSos() }
               SmallButton("Sky Mode", Modifier.weight(1f)) { controller.skyMode() }
             }
           }

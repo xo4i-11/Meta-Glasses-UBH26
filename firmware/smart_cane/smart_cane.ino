@@ -179,6 +179,8 @@ void sendSos(const char *reason) {
   }
 }
 
+void cancelAlarm();
+
 void onWs(WStype_t type, uint8_t *payload, size_t len) {
   if (type == WStype_CONNECTED) {
     wsUp = true;
@@ -193,6 +195,7 @@ void onWs(WStype_t type, uint8_t *payload, size_t len) {
     const char *t = d["t"] | "";
     if (!strcmp(t, "tone")) play(d["f"] | 1500, d["n"] | 1, d["on"] | 80, d["off"] | 60);
     else if (!strcmp(t, "find")) { setMode(FIND); lastAction = "find my cane"; }
+    else if (!strcmp(t, "cancel")) { if (mode == COUNTDOWN || mode == SOS_SENT || mode == FIND) cancelAlarm(); }  // app's Cancel SOS
     else if (!strcmp(t, "auto")) autoMode = d["on"] | true;
     else if (!strcmp(t, "cfg")) alertCm = constrain((int)(d["th"] | alertCm), 30, 400);
   }
@@ -286,15 +289,14 @@ void runFallLogic(unsigned long now) {
       }
     } else flatSince = 0;
   }
-  // Picked back up during countdown / siren (moving for 0.7 s) -> user is fine
-  if (mode == COUNTDOWN || mode == FIND) {
+  // Picked back up during countdown / after the SOS / siren (moving for 0.7 s) -> user is fine
+  if (mode == COUNTDOWN || mode == SOS_SENT || mode == FIND) {
     if (!still) { if (!movingSince) movingSince = now; }
     else if (now - lastMoveAt > 200) movingSince = 0;
     if (movingSince && now - movingSince > 700) {
-      if (mode == COUNTDOWN) sendSimple("cancel");
-      setMode(NORMAL);
-      lastAction = "picked up";
       movingSince = 0;
+      cancelAlarm();
+      lastAction = "picked up";
     }
   }
 }
@@ -351,8 +353,8 @@ void pollJoystick(unsigned long now) {
 }
 
 void cancelAlarm() {
-  if (mode == COUNTDOWN) sendSimple("cancel");
-  if (mode == SOS_SENT) sendSimple("cancel");
+  if (mode == COUNTDOWN || mode == SOS_SENT) sendSimple("cancel");  // phone tells the caregiver "all clear"
+  pendingSos = false;  // cancelled before it could go out
   setMode(NORMAL);
   lastAction = "cancelled";
   play(900, 1, 200, 50);

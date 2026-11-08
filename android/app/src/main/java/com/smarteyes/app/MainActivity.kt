@@ -178,11 +178,11 @@ class MainActivity : ComponentActivity() {
 
           if (s.alarm.isNotEmpty()) {
             Button(
-                onClick = { controller.clearAlarm() },
+                onClick = { controller.cancelSos() },
                 modifier = Modifier.fillMaxWidth().height(72.dp),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = Color.White)) {
-                  Text("${s.alarm}  ·  tap to clear", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                  Text("${s.alarm}  ·  TAP TO CANCEL SOS", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
           }
 

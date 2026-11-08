@@ -27,4 +27,17 @@ class SosSender(context: Context, private val backend: Backend) {
       "Email failed: ${e.message}"
     }
   }
+
+  /** Follow-up after a cancelled SOS so the caregiver can stand down. */
+  suspend fun sendAllClear(lat: Double?, lon: Double?): String {
+    val to = caregiverEmail
+    if ("@" !in to) return ""
+    return try {
+      backend.sos(to, "CANCELLED: SOS cancelled, they're OK (cane found / false alarm)", lat, lon)
+      "Your caregiver was told you're OK"
+    } catch (e: Exception) {
+      Log.e("SosSender", "all-clear email failed", e)
+      "Couldn't email the all-clear: ${e.message}"
+    }
+  }
 }

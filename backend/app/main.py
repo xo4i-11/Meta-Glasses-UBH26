@@ -195,13 +195,18 @@ def send_sos_email(to: str, reason: str, lat: Optional[float], lon: Optional[flo
         else "Location unknown (no GPS fix)."
     )
     msg = EmailMessage()
-    msg["Subject"] = ("[TEST] " if reason.startswith("TEST") else "") + "SMART EYES SOS: your person may need help"
     msg["From"] = f"Smart Eyes <{config.SMTP_USER}>"
     msg["To"] = to
-    msg.set_content(
-        f"Smart Eyes sent an SOS.\n\nWhat happened: {reason}\nTime: {time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n\n"
-        f"Where they are:\n{where}\n\nPlease check on them right away."
-    )
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S %Z")
+    if reason.startswith("CANCELLED"):  # follow-up to an SOS: the user (or someone) cancelled it
+        msg["Subject"] = "Smart Eyes: SOS cancelled, they're OK"
+        msg.set_content(f"The earlier Smart Eyes SOS was cancelled.\n\n{reason}\nTime: {stamp}\n\nLast known location:\n{where}")
+    else:
+        msg["Subject"] = ("[TEST] " if reason.startswith("TEST") else "") + "SMART EYES SOS: your person may need help"
+        msg.set_content(
+            f"Smart Eyes sent an SOS.\n\nWhat happened: {reason}\nTime: {stamp}\n\n"
+            f"Where they are:\n{where}\n\nPlease check on them right away."
+        )
     with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=12) as s:
         s.starttls()
         s.login(config.SMTP_USER, config.SMTP_PASS)
@@ -211,7 +216,8 @@ def send_sos_email(to: str, reason: str, lat: Optional[float], lon: Optional[flo
 @app.post("/api/sos", dependencies=[Depends(require_token)])
 async def sos(body: SosIn):
     """Phone asks the server to email the caregiver (the phone has no SIM, so no SMS)."""
-    row = await run_in_threadpool(db.add_event, kind="sos", label=body.reason, source="phone", lat=body.lat, lon=body.lon)
+    kind = "status" if body.reason.startswith("CANCELLED") else "sos"
+    row = await run_in_threadpool(db.add_event, kind=kind, label=body.reason, source="phone", lat=body.lat, lon=body.lon)
     await hub.broadcast({"type": "event", "data": row})
     try:
         await run_in_threadpool(send_sos_email, body.to, body.reason, body.lat, body.lon)

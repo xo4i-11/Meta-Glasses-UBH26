@@ -161,6 +161,9 @@ class CaneLink(private val baseUrl: () -> String, private val token: String) {
   /** "Where's my cane?": cane plays a locator siren for 20 s (stops when picked up). */
   fun find() = send(JSONObject().put("t", "find"))
 
+  /** Stop the cane's fall countdown / SOS siren (app's Cancel SOS button). */
+  fun cancel() = send(JSONObject().put("t", "cancel"))
+
   /** Shows auto-announce state on the cane's OLED. */
   fun setAuto(on: Boolean) = send(JSONObject().put("t", "auto").put("on", on))
 

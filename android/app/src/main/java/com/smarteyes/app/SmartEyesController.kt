@@ -208,12 +208,7 @@ class SmartEyesController(private val context: Context) {
         }
         log("⏱ fall countdown")
       }
-      CaneEvent.Cancelled -> {
-        fallFailsafe?.cancel()
-        _ui.update { it.copy(alarm = "") }
-        voice.warn("Okay, cancelled")
-        log("✓ SOS cancelled")
-      }
+      CaneEvent.Cancelled -> onCancelled()
       is CaneEvent.Sos -> {
         fallFailsafe?.cancel()
         sendSos(e.reason, e.lat, e.lon)
@@ -316,6 +311,31 @@ class SmartEyesController(private val context: Context) {
 
   fun testSos() = sendSos("TEST from the Smart Eyes app (no emergency)", null, null)
 
+  /** App's "Cancel SOS": stop the cane's siren and tell the caregiver it's OK. */
+  fun cancelSos() {
+    cane.cancel() // the cane stops its siren and echoes "cancel" back (ignored below: already handled)
+    onCancelled()
+  }
+
+  /** Cancelled from the joystick, by picking the cane up, or from the app. Idempotent. */
+  private fun onCancelled() {
+    fallFailsafe?.cancel()
+    val emailedAt = synchronized(this) { lastSosAt.also { lastSosAt = -SOS_DEDUPE_MS } } // next fall can SOS again
+    val sosWentOut = SystemClock.elapsedRealtime() - emailedAt < ALL_CLEAR_WINDOW_MS
+    if (_ui.value.alarm.isEmpty() && !sosWentOut) return // the cane's echo of a cancel we already handled
+    _ui.update { it.copy(alarm = "") }
+    if (sosWentOut) {
+      scope.launch {
+        val status = sos.sendAllClear(pointing.lastLocation()?.latitude, pointing.lastLocation()?.longitude)
+        voice.warn("Okay, cancelled. $status")
+        log("✓ SOS cancelled · $status")
+      }
+    } else {
+      voice.warn("Okay, cancelled")
+      log("✓ SOS cancelled")
+    }
+  }
+
   /** Email to the caregiver with a fresh GPS fix (Google Maps link); the server also logs it for the dashboard. */
   private fun sendSos(reason: String, caneLat: Double?, caneLon: Double?) {
     // One fall = one email, even if the same SOS arrives twice (two relay sockets, cane resend).
@@ -354,10 +374,6 @@ class SmartEyesController(private val context: Context) {
     log("server -> $url")
   }
 
-  fun clearAlarm() {
-    fallFailsafe?.cancel() // tapping the red banner on the phone also stops the backup SOS
-    _ui.update { it.copy(alarm = "") }
-  }
 
   /** Fallback when the glasses won't connect: phone camera on a chest strap. */
   fun usePhoneCamera(enable: Boolean) {
@@ -410,5 +426,6 @@ class SmartEyesController(private val context: Context) {
     /** cane countdown (5 s) + Wi-Fi slack: if no SOS/cancel arrived by then, the phone sends it */
     private const val FALL_FAILSAFE_MS = 9000L
     private const val SOS_DEDUPE_MS = 30_000L
+    private const val ALL_CLEAR_WINDOW_MS = 30 * 60_000L // cancel within 30 min of an SOS emails "all clear"
   }
 }

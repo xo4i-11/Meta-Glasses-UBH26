@@ -1,0 +1,8 @@
+# Copy to local.properties (Android Studio also writes sdk.dir here). Never commit it.
+# Your laptop's IP on the phone hotspot while developing, or your Vultr / GoDaddy domain at the event.
+# The cane firmware must point at the same server (BACKEND_HOST in smart_cane.ino).
+backend_url=http://192.168.43.100:8000
+app_token=
+# From the Wearables Developer Center. In Developer Mode "0" works for both.
+mwdat_application_id=0
+mwdat_client_token=0

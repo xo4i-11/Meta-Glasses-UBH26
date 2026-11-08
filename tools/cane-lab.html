@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cane Lab</title>
+<style>
+/* Layout: a test bench. Header with the connection + progress, then one card per part, then wiring + raw log. */
+:root {
+  --bg: #f3f5f7; --panel: #ffffff; --sunk: #eef1f4; --fg: #17202a; --muted: #5d6877; --line: #d6dce4;
+  --accent: #0f6bdc; --ok: #13834f; --warn: #b26a00; --bad: #c43a3a;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  /* wiring diagram tokens */
+  --pcb: #e6ecf6; --pcb-line: #6f86ab; --island: #f9fbfc;
+  --w5v: #cf3434; --w33: #d9831a; --wgnd: #4b5666; --wsig: #1d6be0; --wi2c: #118a58; --wana: #8a43d4; --wspk: #b0368f;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1116; --panel: #151b23; --sunk: #0f141a; --fg: #e5eaf0; --muted: #94a0b0; --line: #29323d;
+  --accent: #5c9dff; --ok: #3ccb83; --warn: #f0a83a; --bad: #ff6b6b;
+  --pcb: #151f30; --pcb-line: #4d6890; --island: #131a22;
+  --w5v: #ff6b6b; --w33: #ffad4a; --wgnd: #a3aebd; --wsig: #62a6ff; --wi2c: #3ccb8c; --wana: #bb8cff; --wspk: #f07acb; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0d1116; --panel: #151b23; --sunk: #0f141a; --fg: #e5eaf0; --muted: #94a0b0; --line: #29323d;
+  --accent: #5c9dff; --ok: #3ccb83; --warn: #f0a83a; --bad: #ff6b6b;
+  --pcb: #151f30; --pcb-line: #4d6890; --island: #131a22;
+  --w5v: #ff6b6b; --w33: #ffad4a; --wgnd: #a3aebd; --wsig: #62a6ff; --wi2c: #3ccb8c; --wana: #bb8cff; --wspk: #f07acb; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 20px max(16px, 2vw) 60px; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; }
+h1 { font-size: 26px; margin: 0; letter-spacing: -.01em; }
+h2 { font-size: 16px; margin: 0; }
+.sub { color: var(--muted); font-size: 13px; }
+button { font: 600 14px var(--sans); border: 1px solid var(--line); background: var(--panel); color: var(--fg); padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.small { padding: 5px 10px; font-size: 13px; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.progress { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.bar { width: 180px; height: 10px; background: var(--sunk); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .3s; }
+.notice { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: 6px 10px 10px 6px; padding: 12px 16px; }
+.notice[hidden] { display: none; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card header { gap: 8px; }
+.pill { font: 600 12px var(--mono); padding: 3px 9px; border-radius: 99px; border: 1px solid currentColor; margin-left: auto; white-space: nowrap; }
+.pill.wait { color: var(--muted); } .pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
+.where { font: 500 12px var(--mono); color: var(--muted); }
+.big { font: 700 40px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#cmdTable td { padding: 5px 6px; border-bottom: 1px solid var(--line); }
+#cmdTable td:first-child { font: 600 12px var(--mono); color: var(--muted); white-space: nowrap; }
+#cmdTable td.n { text-align: right; font: 600 12px var(--mono); color: var(--muted); }
+#cmdTable tr.seen td.n { color: var(--ok); }
+#cmdTable tr.flash td { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font: 13px var(--mono); }
+.kv b { font-weight: 600; }
+details { border-top: 1px solid var(--line); padding-top: 8px; }
+summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--muted); }
+ul.tips { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; display: grid; gap: 4px; }
+.hint { font-size: 13.5px; padding: 8px 10px; border-radius: 8px; background: var(--sunk); }
+.hint.bad { color: var(--bad); } .hint.ok { color: var(--ok); } .hint.warn { color: var(--warn); }
+.hint:empty { display: none; }
+svg.viz { width: 100%; height: auto; display: block; background: var(--sunk); border-radius: 8px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font: 600 12px var(--mono); padding: 3px 8px; border-radius: 6px; background: var(--sunk); color: var(--muted); border: 1px solid var(--line); }
+.chip.on { color: var(--ok); border-color: var(--ok); }
+.chip.live { background: var(--accent); color: #fff; border-color: var(--accent); }
+.axes { display: grid; gap: 6px; }
+.axis { display: grid; grid-template-columns: 22px 1fr 64px; gap: 8px; align-items: center; font: 13px var(--mono); }
+.track { position: relative; height: 12px; background: var(--sunk); border-radius: 6px; border: 1px solid var(--line); }
+.track::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--muted); }
+.track > i { position: absolute; top: 0; bottom: 0; background: var(--accent); border-radius: 5px; }
+input[type=text], input[type=range] { font: 14px var(--sans); }
+input[type=text] { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--sunk); color: var(--fg); min-width: 0; flex: 1; }
+#log { font: 12px/1.4 var(--mono); background: var(--sunk); border-radius: 8px; padding: 10px; height: 180px; overflow: auto; white-space: pre; color: var(--muted); }
+.wiring { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; overflow-x: auto; }
+.wiring svg { display: block; width: 100%; min-width: 760px; height: auto; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* wiring diagram styles */
+.board { fill: var(--pcb); stroke: var(--pcb-line); stroke-width: 2; }
+.comp { fill: var(--panel); stroke: var(--fg); stroke-width: 1.5; }
+.usb { fill: var(--muted); }
+.btn { fill: var(--panel); stroke: var(--muted); stroke-width: 1.2; }
+.wiring .chip { fill: var(--fg); }
+.ant { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.hole { fill: var(--panel); stroke: #c9a227; stroke-width: 3; }
+.npn { fill: var(--panel); stroke: var(--fg); stroke-width: 1.5; }
+.arrowhead { fill: var(--wgnd); }
+.pin { fill: var(--fg); }
+.w { fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.w.p5 { stroke: var(--w5v); } .w.p33 { stroke: var(--w33); } .w.gnd { stroke: var(--wgnd); }
+.w.sig { stroke: var(--wsig); } .w.i2c { stroke: var(--wi2c); } .w.ana { stroke: var(--wana); } .w.spk { stroke: var(--wspk); }
+.w.p5sig { stroke: var(--w5v); stroke-dasharray: 6 4; }
+.dot.i2c { fill: var(--wi2c); } .dot.sig { fill: var(--wsig); }
+.tag { fill: var(--panel); stroke-width: 2; }
+.tag.p5 { stroke: var(--w5v); } .tag.p33 { stroke: var(--w33); } .tag.gnd { stroke: var(--wgnd); }
+.wiring text { fill: var(--fg); }
+.t-title { font: 600 15px var(--sans); } .t-sub { font: 400 12.5px var(--sans); fill: var(--muted); }
+.t-cap { font: 400 12px var(--sans); fill: var(--muted); } .t-pin { font: 500 12px var(--mono); }
+.t-board { font: 700 18px var(--sans); } .t-boardsub { font: 400 12px var(--sans); fill: var(--muted); }
+.t-chip { font: 500 10px var(--mono); fill: var(--muted); text-anchor: middle; }
+.wiring .t-chipw { font: 600 10px var(--mono); fill: var(--bg); text-anchor: middle; }
+.t-silk { font: 600 14px var(--mono); } .t-free { font: italic 400 11.5px var(--sans); fill: var(--muted); }
+.t-tag { font: 600 11px var(--mono); } .t-tag.p5 { fill: var(--w5v); } .t-tag.p33 { fill: var(--w33); } .t-tag.gnd { fill: var(--wgnd); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Cane Lab</h1>
+      <div class="sub">Live hardware check for the Smart Eyes cane · ESP32-C3 SuperMini running <code>firmware/cane_lab</code></div>
+    </div>
+    <div class="row">
+      <button id="connect" class="primary">Connect cane (USB)</button>
+      <button id="disconnect" disabled>Disconnect</button>
+      <button id="simulate" title="Fake data so you can explore the page without the board">Simulate</button>
+    </div>
+    <div class="progress" aria-live="polite">
+      <div class="bar" aria-hidden="true"><i id="progBar"></i></div>
+      <b id="progText">0 of 9 parts verified</b>
+    </div>
+  </header>
+
+  <div id="notice" class="notice" hidden></div>
+  <div id="howto" class="notice" style="border-left-color:var(--accent)">
+    <b>How to use:</b> flash <code>firmware/cane_lab/cane_lab.ino</code>, close the Arduino Serial Monitor, then press <b>Connect cane</b> and pick the <i>USB Serial Device</i>. Every card below checks one part. Green = working. Follow the tips in any card that isn't green.
+  </div>
+
+  <div class="grid">
+    <!-- BOARD -->
+    <section class="card" id="c-board">
+      <header class="row"><h2>Board</h2><span class="where">USB-C</span><span class="pill wait" id="s-board">waiting</span></header>
+      <div class="kv"><span>status</span><b id="boardState">not connected</b><span>readings/s</span><b id="rate">0</b><span>uptime</span><b id="uptime">–</b></div>
+      <div class="row"><button class="small" data-cmd="led">Blink blue LED</button></div>
+      <details><summary>If it won't connect</summary><ul class="tips">
+        <li>Close the Arduino IDE Serial Monitor (only one program can use the port).</li>
+        <li>Use Chrome or Edge on a laptop. Firefox and Safari can't talk to USB serial.</li>
+        <li>No "USB Serial Device" in the list? Try another USB-C cable; many are charge-only.</li>
+        <li>Connected but 0 readings/s? The board is running different firmware. Flash <code>cane_lab.ino</code>.</li>
+      </ul></details>
+    </section>
+
+    <!-- I2C -->
+    <section class="card" id="c-i2c">
+      <header class="row"><h2>I2C bus</h2><span class="where">pins 6 SDA · 7 SCL</span><span class="pill wait" id="s-i2c">waiting</span></header>
+      <div class="chips"><span class="chip" id="i2c-53">0x53 ADXL345</span><span class="chip" id="i2c-3c">0x3C OLED</span></div>
+      <div class="sub">Rescans every 3 s. Found: <b id="i2cList" style="font-family:var(--mono)">–</b></div>
+      <div class="hint" id="h-i2c"></div>
+      <details><summary>Checks</summary><ul class="tips">
+        <li>Nothing found: SDA and SCL swapped, or the parts have no 3.3V / GND.</li>
+        <li>Only one found: that part's SDA/SCL jumper is loose.</li>
+        <li>0x1D instead of 0x53: wire the ADXL345's <b>SDO to GND</b>.</li>
+        <li>0x3D instead of 0x3C: your OLED uses the other address (tell Claude to switch it).</li>
+      </ul></details>
+    </section>
+
+    <!-- ACCEL -->
+    <section class="card" id="c-acc">
+      <header class="row"><h2>Accelerometer</h2><span class="where">ADXL345 on I2C</span><span class="pill wait" id="s-acc">waiting</span></header>
+      <div class="axes">
+        <div class="axis"><span>x</span><div class="track"><i id="bx"></i></div><b id="vx">–</b></div>
+        <div class="axis"><span>y</span><div class="track"><i id="by"></i></div><b id="vy">–</b></div>
+        <div class="axis"><span>z</span><div class="track"><i id="bz"></i></div><b id="vz">–</b></div>
+      </div>
+      <div class="kv"><span>total</span><b id="vtot">–</b><span>gravity on</span><b id="gaxis">–</b><span>peak (5 s)</span><b id="peak">–</b></div>
+      <div class="hint" id="h-acc"></div>
+      <details><summary>Checks</summary><ul class="tips">
+        <li>Still = total about 1.00 g. All zeros: <b>CS must go to 3.3V</b>.</li>
+        <li>Point the cane down: the axis along the shaft should read about ±1.0. The firmware expects <b>y</b>.</li>
+        <li>Tap the board on the table: the peak should jump above 2.5 g (the fall detector's trigger).</li>
+      </ul></details>
+    </section>
+
+    <!-- ULTRASONIC -->
+    <section class="card" id="c-us">
+      <header class="row"><h2>Ultrasonic</h2><span class="where">20 TRIG · 21 ECHO via 1k/2k</span><span class="pill wait" id="s-us">waiting</span></header>
+      <div class="row" style="align-items:baseline"><span class="big" id="dist">–</span><span class="sub">cm</span><span class="sub" style="margin-left:auto">seen <b id="drange">–</b></span></div>
+      <svg class="viz" viewBox="0 0 300 70" preserveAspectRatio="none" aria-label="distance over the last 10 seconds">
+        <line x1="0" y1="35" x2="300" y2="35" stroke="var(--line)" stroke-dasharray="3 4"/>
+        <rect id="alarmZone" x="0" y="0" width="300" height="0" fill="var(--bad)" opacity=".12"/>
+        <polyline id="spark" fill="none" stroke="var(--accent)" stroke-width="2" points=""/>
+      </svg>
+      <div class="sub">Move your hand from about 60 cm to 10 cm and back.</div>
+      <div style="border-top:1px solid var(--line); padding-top:10px; display:grid; gap:8px">
+        <div class="row"><b style="font-size:14px">Proximity alarm</b><label class="sub"><input type="checkbox" id="alarmOn" checked> on</label><span id="alarmState" class="pill wait" style="margin-left:auto">quiet</span></div>
+        <div class="row">
+          <span class="sub">starts below</span>
+          <input type="range" id="alarmCm" min="4" max="50" step="1" value="10" aria-label="alarm start distance in cm" style="flex:1; min-width:120px">
+          <b id="alarmCmV" style="font:13px var(--mono)">10 cm</b>
+        </div>
+        <div class="sub">Inside the red band the speaker beeps, faster and higher the closer you get, and solid under 3 cm. Move your hand in slowly from 15 cm until it's touching.</div>
+      </div>
+      <div class="hint" id="h-us"></div>
+      <details><summary>Checks</summary><ul class="tips">
+        <li>Always "–" (no echo): HC-SR04 VCC must be <b>5V</b>; check TRIG on <b>20</b> and the ECHO path <b>ECHO → 1 kΩ → 21</b>, plus <b>21 → 2 kΩ → G</b>.</li>
+        <li>Stuck on one number: something is right in front of it, or the sensor faces a wall.</li>
+        <li>Jumpy: soft or angled surfaces scatter sound. That's normal.</li>
+      </ul></details>
+    </section>
+
+    <!-- JOYSTICK -->
+    <section class="card" id="c-joy">
+      <header class="row"><h2>Joystick</h2><span class="where">0 VRx · 1 VRy · 3 SW</span><span class="pill wait" id="s-joy">waiting</span></header>
+      <div class="row" style="align-items:flex-start; gap:14px">
+        <svg class="viz" viewBox="0 0 160 160" style="width:160px; flex:none" aria-label="joystick position">
+          <rect x="30" y="30" width="100" height="100" fill="none" stroke="var(--line)" stroke-dasharray="3 4"/>
+          <circle cx="80" cy="80" r="76" fill="none" stroke="var(--line)"/>
+          <text x="80" y="14" text-anchor="middle" font-size="11" fill="var(--muted)" id="lUP">UP</text>
+          <text x="80" y="155" text-anchor="middle" font-size="11" fill="var(--muted)" id="lDOWN">DOWN</text>
+          <text x="6" y="84" font-size="11" fill="var(--muted)" id="lLEFT">L</text>
+          <text x="146" y="84" font-size="11" fill="var(--muted)" id="lRIGHT">R</text>
+          <circle id="knob" cx="80" cy="80" r="12" fill="var(--accent)"/>
+        </svg>
+        <div style="display:grid; gap:8px; min-width:0; flex:1">
+          <div class="chips"><span class="chip" id="j-UP">up</span><span class="chip" id="j-DOWN">down</span><span class="chip" id="j-LEFT">left</span><span class="chip" id="j-RIGHT">right</span><span class="chip" id="j-CLICK">click</span></div>
+          <div class="kv"><span>x</span><b id="jx">–</b><span>y</span><b id="jy">–</b><span>button</span><b id="jsw">–</b></div>
+        </div>
+      </div>
+      <div><b style="font-size:13px">Pin finder</b> <span class="sub">— hold the stick pressed. Any pin that turns blue is where your SW wire really goes.</span></div>
+      <div class="chips"><span class="chip" id="pf-3">pin 3 (correct)</span><span class="chip" id="pf-2">pin 2</span><span class="chip" id="pf-5">pin 5</span><span class="chip" id="pf-9">pin 9 (BOOT)</span></div>
+      <div class="hint" id="h-joy"></div>
+      <details open><summary>Button not registering?</summary><ul class="tips">
+        <li>Press the stick <b>straight down</b> until it clicks. Tilting doesn't count.</li>
+        <li>SW (sometimes KEY or SEL) goes to <b>pin 3</b>: the <b>5th hole down on the right header</b> (5V, G, 3.3, 4, <b>3</b>, 2, 1, 0).</li>
+        <li>Multimeter in beep mode on the module's SW and GND pins: it should beep while pressed. No beep = bad button; use a spare joystick.</li>
+        <li>If a pin finder chip lights up, move the wire from that pin to pin 3.</li>
+        <li>"button" stuck on pressed: the SW wire is touching GND somewhere.</li>
+      </ul></details>
+    </section>
+
+    <!-- APP COMMANDS -->
+    <section class="card" id="c-cmd">
+      <header class="row"><h2>App commands</h2><span class="where">joystick → phone app</span><span class="pill wait" id="s-cmd">waiting</span></header>
+      <div class="sub">The same joystick logic as the real cane. Each move lights the command the app receives.</div>
+      <table style="width:100%; border-collapse:collapse; font-size:13.5px">
+        <tbody id="cmdTable">
+          <tr data-b="describe"><td>press</td><td><b>describe</b>: Gemini describes the scene</td><td class="n">0</td></tr>
+          <tr data-b="read"><td>up</td><td><b>read</b>: reads text</td><td class="n">0</td></tr>
+          <tr data-b="ask"><td>down</td><td><b>ask</b>: listens for a question</td><td class="n">0</td></tr>
+          <tr data-b="repeat"><td>left</td><td><b>repeat</b>: says the last thing again</td><td class="n">0</td></tr>
+          <tr data-b="auto"><td>right</td><td><b>auto</b>: announcements on / off</td><td class="n">0</td></tr>
+          <tr data-b="sos"><td>hold 3 s</td><td><b>SOS</b>: alerts the caregiver</td><td class="n">0</td></tr>
+        </tbody>
+      </table>
+      <div id="cmdLog" class="sub" style="font-family:var(--mono); min-height:3.2em"></div>
+      <div class="hint" id="h-cmd"></div>
+      <div style="border-top:1px solid var(--line); padding-top:10px; display:grid; gap:8px">
+        <div class="row"><b style="font-size:14px">Forward to the app</b><span class="sub">acts as the cane on the backend, so the phone app reacts for real</span></div>
+        <div class="row">
+          <input type="text" id="beUrl" value="http://localhost:8000" aria-label="backend address">
+          <button class="small" id="beConnect">Connect</button>
+        </div>
+        <div class="sub" id="beState">not forwarding</div>
+      </div>
+    </section>
+
+    <!-- SPEAKER -->
+    <section class="card" id="c-spk">
+      <header class="row"><h2>Speaker</h2><span class="where">4 → 1k → NPN</span><span class="pill wait" id="s-spk">waiting</span></header>
+      <div class="row">
+        <button class="small" data-cmd="sweep">Play sweep</button>
+        <button class="small" data-cmd="beep 3">3 beeps</button>
+        <button class="small" id="toneBtn">Tone</button>
+        <input type="range" id="freq" min="200" max="4000" step="50" value="1500" aria-label="tone frequency" style="flex:1; min-width:100px">
+        <b id="freqV" style="font:13px var(--mono)">1500 Hz</b>
+      </div>
+      <div class="sub">What did you hear?</div>
+      <div class="row">
+        <button class="small" data-spk="ok">Loud and clear</button>
+        <button class="small" data-spk="faint">Faint</button>
+        <button class="small" data-spk="silent">Nothing</button>
+      </div>
+      <div class="hint" id="h-spk"></div>
+      <details><summary>The driver circuit</summary><ul class="tips">
+        <li>2N2222A, printed side toward you: left E → <b>G</b>, middle B → <b>1 kΩ → pin 4</b>, right C → <b>speaker −</b>.</li>
+        <li>Speaker + → <b>22 Ω → 5V</b>. Diode across the speaker (stripe to +). 100 µF between 5V and G.</li>
+      </ul></details>
+    </section>
+
+    <!-- OLED -->
+    <section class="card" id="c-oled">
+      <header class="row"><h2>OLED</h2><span class="where">I2C 0x3C</span><span class="pill wait" id="s-oled">waiting</span></header>
+      <div class="sub">The screen should say <b>CANE LAB</b> with the live distance and g. Send your own line:</div>
+      <div class="row"><input type="text" id="oledText" maxlength="21" value="hello smart eyes" aria-label="text for the OLED"><button class="small" id="oledSend">Send</button></div>
+      <div class="row"><button class="small" data-oled="ok">I can see it</button><button class="small" data-oled="no">Screen is blank</button></div>
+      <div class="hint" id="h-oled"></div>
+    </section>
+
+    <!-- IR -->
+    <section class="card" id="c-ir">
+      <header class="row"><h2>Hole sensor (IR)</h2><span class="where">pin 10 · 3.3V</span><span class="pill wait" id="s-ir">waiting</span></header>
+      <svg class="viz" viewBox="0 0 300 120" aria-label="IR sensor over the floor">
+        <line x1="70" y1="0" x2="150" y2="48" stroke="var(--muted)" stroke-width="6" stroke-linecap="round"/>
+        <rect x="136" y="40" width="28" height="16" rx="3" fill="var(--panel)" stroke="var(--fg)"/>
+        <line x1="145" y1="58" x2="145" y2="94" stroke="var(--wspk)" stroke-width="2" stroke-dasharray="4 3"/>
+        <line id="irBeamBack" x1="156" y1="94" x2="156" y2="60" stroke="var(--ok)" stroke-width="2" stroke-dasharray="4 3"/>
+        <g id="irFloor"><rect x="0" y="96" width="300" height="8" fill="var(--muted)"/><text x="8" y="116" font-size="11" fill="var(--muted)">floor below the sensor</text></g>
+        <text id="irHoleTxt" x="150" y="112" text-anchor="middle" font-size="13" font-weight="700" fill="var(--bad)" style="opacity:0">HOLE / DROP-OFF</text>
+        <text x="176" y="52" font-size="11" fill="var(--muted)">IR out + back</text>
+      </svg>
+      <div class="row" style="align-items:baseline"><span class="big" id="irState" style="font-size:24px">–</span><span class="sub" id="irRaw" style="margin-left:auto"></span></div>
+      <div class="chips"><span class="chip" id="ir1">1 · floor seen</span><span class="chip" id="ir2">2 · hole seen</span><span class="chip" id="ir3">3 · floor again</span></div>
+      <div class="kv"><span>hole alarms</span><b id="irAlarms">0</b><span>last no-floor</span><b id="irLast">–</b></div>
+      <div class="hint" id="h-ir"></div>
+      <div style="border-top:1px solid var(--line); padding-top:10px; display:grid; gap:8px">
+        <div class="row"><b style="font-size:14px">Trigger height</b><span class="sub">hole alarm when the floor is further than this</span></div>
+        <div class="row">
+          <input type="range" id="irTarget" min="10" max="20" step="1" value="15" aria-label="target trigger height in cm" style="flex:1; min-width:120px">
+          <b id="irTargetV" style="font:13px var(--mono)">15 cm</b>
+        </div>
+        <div class="sub">Measure it: point the <b>ultrasonic and the IR both down</b> at the floor, side by side, and lift them together slowly. The page notes the ultrasonic distance each time the IR flips.</div>
+        <div class="kv"><span>switches to hole at</span><b id="irTrip">–</b><span>back to floor at</span><b id="irBack">–</b><span>average (last 5)</span><b id="irAvg">–</b></div>
+        <div class="hint" id="h-irCal"></div>
+        <div class="row"><button class="small" id="irCalReset">Reset measurements</button></div>
+      </div>
+      <label class="sub"><input type="checkbox" id="irInvert"> my module reads HIGH over the floor (set <code>IR_ACTIVE_LOW 0</code>)</label>
+      <details><summary>Test and tune it</summary><ul class="tips">
+        <li>Hold the cane tip <b>5–10 cm above a table</b>: should say FLOOR SEEN.</li>
+        <li>Slide it <b>past the table edge</b>: should say NO FLOOR and count a hole alarm. Then bring it back.</li>
+        <li>Mount the IR about <b>5 cm above the cane tip</b>, pointing straight down. A stair step or curb then puts the floor 20–25 cm away, beyond a 15 cm trigger.</li>
+        <li>The <b>screw</b> on the module sets the trigger height. Turn it a quarter turn and lift again. The page shows whether you went the right way.</li>
+        <li>FC-51 modules reach about 15–25 cm on light floors and less on dark ones. TCRT5000 modules only reach 1–3 cm, so they can't do this.</li>
+        <li>Black carpet and bright sunlight weaken IR. Test on the floor you'll demo on.</li>
+        <li>False alarms while walking? Each cane lift shows up as "last no-floor". Set <code>HOLE_CONFIRM_MS</code> in <code>smart_cane.ino</code> just above your typical lift (120 → 250 ms).</li>
+        <li>Flips when you wave a hand from far away but not over edges? That's a PIR motion sensor, not an IR obstacle sensor.</li>
+      </ul></details>
+    </section>
+  </div>
+
+  <section class="card">
+    <header class="row"><h2>Wiring (top view, USB-C up)</h2><span class="sub" style="margin-left:auto">same as docs/wiring.html</span></header>
+    <div class="wiring"><svg viewBox="0 0 1000 620" role="img" aria-label="Wiring diagram for the Smart Eyes cane on an ESP32-C3 SuperMini, drawn with the board&#x27;s real pin order" style="min-width:760px"><text class="t-board" x="500.0" y="22" text-anchor="middle">ESP32-C3 SuperMini</text><text class="t-boardsub" x="500.0" y="38" text-anchor="middle">top view · USB-C up · pin labels as printed</text><rect class="board" x="430" y="64" width="140" height="452" rx="8"/><rect class="usb" x="470" y="52" width="60" height="34" rx="5"/><text class="t-chipw" x="500.0" y="74" text-anchor="middle">USB-C</text><rect class="btn" x="468" y="100" width="24" height="16" rx="3"/><text class="t-chip" x="480" y="128" text-anchor="middle">BOOT</text><rect class="btn" x="508" y="100" width="24" height="16" rx="3"/><text class="t-chip" x="520" y="128" text-anchor="middle">RST</text><rect class="chip" x="474" y="274" width="52" height="52" rx="4" transform="rotate(45 500 300)"/><text class="t-chipw" x="500" y="304" text-anchor="middle">C3</text><rect class="ant" x="464" y="476" width="72" height="22" rx="3"/><text class="t-chip" x="500" y="491" text-anchor="middle">antenna</text><circle class="hole" cx="442" cy="130" r="6"/><text class="t-silk" x="454" y="135" text-anchor="start">5</text><circle class="hole" cx="442" cy="178" r="6"/><text class="t-silk" x="454" y="183" text-anchor="start">6</text><circle class="hole" cx="442" cy="226" r="6"/><text class="t-silk" x="454" y="231" text-anchor="start">7</text><circle class="hole" cx="442" cy="274" r="6"/><text class="t-silk" x="454" y="279" text-anchor="start">8</text><circle class="hole" cx="442" cy="322" r="6"/><text class="t-silk" x="454" y="327" text-anchor="start">9</text><circle class="hole" cx="442" cy="370" r="6"/><text class="t-silk" x="454" y="375" text-anchor="start">10</text><circle class="hole" cx="442" cy="418" r="6"/><text class="t-silk" x="454" y="423" text-anchor="start">20</text><circle class="hole" cx="442" cy="466" r="6"/><text class="t-silk" x="454" y="471" text-anchor="start">21</text><circle class="hole" cx="558" cy="130" r="6"/><text class="t-silk" x="546" y="135" text-anchor="end">5V</text><circle class="hole" cx="558" cy="178" r="6"/><text class="t-silk" x="546" y="183" text-anchor="end">G</text><circle class="hole" cx="558" cy="226" r="6"/><text class="t-silk" x="546" y="231" text-anchor="end">3.3</text><circle class="hole" cx="558" cy="274" r="6"/><text class="t-silk" x="546" y="279" text-anchor="end">4</text><circle class="hole" cx="558" cy="322" r="6"/><text class="t-silk" x="546" y="327" text-anchor="end">3</text><circle class="hole" cx="558" cy="370" r="6"/><text class="t-silk" x="546" y="375" text-anchor="end">2</text><circle class="hole" cx="558" cy="418" r="6"/><text class="t-silk" x="546" y="423" text-anchor="end">1</text><circle class="hole" cx="558" cy="466" r="6"/><text class="t-silk" x="546" y="471" text-anchor="end">0</text><text class="t-free" x="420" y="134" text-anchor="end">free</text><text class="t-free" x="420" y="278" text-anchor="end">blue LED: leave free</text><text class="t-free" x="420" y="326" text-anchor="end">BOOT: leave free</text><text class="t-free" x="580" y="374" text-anchor="start">boot pin: leave free</text><polyline class="w p5" points="558,130 570,130"/><polyline class="w p5" points="570,130 586,130"/><rect class="tag p5" x="586" y="120" width="44" height="20" rx="10"/><text class="t-tag p5" x="608.0" y="134" text-anchor="middle">5V</text><polyline class="w gnd" points="558,178 570,178"/><polyline class="w gnd" points="570,178 586,178"/><rect class="tag gnd" x="586" y="168" width="44" height="20" rx="10"/><text class="t-tag gnd" x="608.0" y="182" text-anchor="middle">GND</text><polyline class="w p33" points="558,226 570,226"/><polyline class="w p33" points="570,226 586,226"/><rect class="tag p33" x="586" y="216" width="44" height="20" rx="10"/><text class="t-tag p33" x="608.0" y="230" text-anchor="middle">3.3V</text><rect class="comp" x="80" y="30" width="140" height="125" rx="6"/><text class="t-title" x="150.0" y="52" text-anchor="middle">ADXL345</text><text class="t-sub" x="150.0" y="68" text-anchor="middle">accelerometer</text><text class="t-cap" x="150.0" y="171" text-anchor="middle">Y arrow along the shaft</text><rect class="pin" x="217" y="92" width="6" height="6"/><text class="t-pin" x="211" y="99" text-anchor="end">SDA</text><rect class="pin" x="217" y="122" width="6" height="6"/><text class="t-pin" x="211" y="129" text-anchor="end">SCL</text><rect class="pin" x="77" y="82" width="6" height="6"/><text class="t-pin" x="89" y="89" text-anchor="start">VCC</text><polyline class="w p33" points="80,85 64,85"/><rect class="tag p33" x="20" y="75" width="44" height="20" rx="10"/><text class="t-tag p33" x="42.0" y="89" text-anchor="middle">3.3V</text><rect class="pin" x="77" y="100" width="6" height="6"/><text class="t-pin" x="89" y="107" text-anchor="start">GND</text><polyline class="w gnd" points="80,103 64,103"/><rect class="tag gnd" x="20" y="93" width="44" height="20" rx="10"/><text class="t-tag gnd" x="42.0" y="107" text-anchor="middle">GND</text><rect class="pin" x="77" y="118" width="6" height="6"/><text class="t-pin" x="89" y="125" text-anchor="start">CS</text><polyline class="w p33" points="80,121 64,121"/><rect class="tag p33" x="20" y="111" width="44" height="20" rx="10"/><text class="t-tag p33" x="42.0" y="125" text-anchor="middle">3.3V</text><rect class="pin" x="77" y="136" width="6" height="6"/><text class="t-pin" x="89" y="143" text-anchor="start">SDO</text><polyline class="w gnd" points="80,139 64,139"/><rect class="tag gnd" x="20" y="129" width="44" height="20" rx="10"/><text class="t-tag gnd" x="42.0" y="143" text-anchor="middle">GND</text><rect class="comp" x="80" y="190" width="140" height="90" rx="6"/><text class="t-title" x="150.0" y="212" text-anchor="middle">OLED SSD1306</text><text class="t-sub" x="150.0" y="228" text-anchor="middle">128×64</text><rect class="pin" x="217" y="242" width="6" height="6"/><text class="t-pin" x="211" y="249" text-anchor="end">SDA</text><rect class="pin" x="217" y="262" width="6" height="6"/><text class="t-pin" x="211" y="269" text-anchor="end">SCL</text><rect class="pin" x="77" y="242" width="6" height="6"/><text class="t-pin" x="89" y="249" text-anchor="start">VCC</text><polyline class="w p33" points="80,245 64,245"/><rect class="tag p33" x="20" y="235" width="44" height="20" rx="10"/><text class="t-tag p33" x="42.0" y="249" text-anchor="middle">3.3V</text><rect class="pin" x="77" y="262" width="6" height="6"/><text class="t-pin" x="89" y="269" text-anchor="start">GND</text><polyline class="w gnd" points="80,265 64,265"/><rect class="tag gnd" x="20" y="255" width="44" height="20" rx="10"/><text class="t-tag gnd" x="42.0" y="269" text-anchor="middle">GND</text><polyline class="w i2c" points="442,178 430,178 320,178"/><polyline class="w i2c" points="320,95 320,245"/><polyline class="w i2c" points="320,95 220,95"/><path class="w i2c" d="M320 245 H296 A6 6 0 0 0 284 245 H220"/><circle class="dot i2c" cx="320" cy="178" r="4"/><polyline class="w i2c" points="442,226 430,226"/><path class="w i2c" d="M430 226 H326 A6 6 0 0 0 314 226 H290"/><polyline class="w i2c" points="290,125 290,265 220,265"/><polyline class="w i2c" points="290,125 220,125"/><circle class="dot i2c" cx="290" cy="226" r="4"/><rect class="comp" x="80" y="335" width="140" height="66" rx="6"/><text class="t-title" x="150.0" y="357" text-anchor="middle">IR sensor</text><text class="t-cap" x="150.0" y="417" text-anchor="middle">at the tip, pointing DOWN</text><rect class="pin" x="217" y="367" width="6" height="6"/><text class="t-pin" x="211" y="374" text-anchor="end">OUT</text><rect class="pin" x="77" y="357" width="6" height="6"/><text class="t-pin" x="89" y="364" text-anchor="start">VCC</text><polyline class="w p33" points="80,360 64,360"/><rect class="tag p33" x="20" y="350" width="44" height="20" rx="10"/><text class="t-tag p33" x="42.0" y="364" text-anchor="middle">3.3V</text><rect class="pin" x="77" y="381" width="6" height="6"/><text class="t-pin" x="89" y="388" text-anchor="start">GND</text><polyline class="w gnd" points="80,384 64,384"/><rect class="tag gnd" x="20" y="374" width="44" height="20" rx="10"/><text class="t-tag gnd" x="42.0" y="388" text-anchor="middle">GND</text><polyline class="w sig" points="442,370 430,370 220,370"/><rect class="comp" x="80" y="440" width="140" height="110" rx="6"/><text class="t-title" x="150.0" y="462" text-anchor="middle">HC-SR04</text><text class="t-sub" x="150.0" y="478" text-anchor="middle">ultrasonic</text><text class="t-cap" x="150.0" y="566" text-anchor="middle">on the shaft, facing forward</text><rect class="pin" x="217" y="467" width="6" height="6"/><text class="t-pin" x="211" y="474" text-anchor="end">TRIG</text><rect class="pin" x="217" y="517" width="6" height="6"/><text class="t-pin" x="211" y="524" text-anchor="end">ECHO</text><rect class="pin" x="77" y="477" width="6" height="6"/><text class="t-pin" x="89" y="484" text-anchor="start">VCC</text><polyline class="w p5" points="80,480 64,480"/><rect class="tag p5" x="20" y="470" width="44" height="20" rx="10"/><text class="t-tag p5" x="42.0" y="484" text-anchor="middle">5V</text><rect class="pin" x="77" y="517" width="6" height="6"/><text class="t-pin" x="89" y="524" text-anchor="start">GND</text><polyline class="w gnd" points="80,520 64,520"/><rect class="tag gnd" x="20" y="510" width="44" height="20" rx="10"/><text class="t-tag gnd" x="42.0" y="524" text-anchor="middle">GND</text><polyline class="w sig" points="442,418 430,418 370,418 370,470 220,470"/><polyline class="w sig" points="442,466 430,466 400,466 400,520"/><circle class="dot sig" cx="400" cy="520" r="4"/><polyline class="w sig" points="400,520 400,532"/><polyline class="w sig" points="400,532 394,537.0 406,542.0 394,547.0 406,552.0 394,557.0 406,562.0 394,567.0 400,572"/><text class="t-cap" x="412" y="556.0" text-anchor="start">2 kΩ</text><polyline class="w gnd" points="400,572 400,588"/><rect class="tag gnd" x="378.0" y="588" width="44" height="20" rx="10"/><text class="t-tag gnd" x="400.0" y="602" text-anchor="middle">GND</text><polyline class="w sig" points="400,520 340,520"/><polyline class="w p5sig" points="280,520 287.5,514 295.0,526 302.5,514 310.0,526 317.5,514 325.0,526 332.5,514 340,520"/><text class="t-cap" x="310.0" y="540" text-anchor="middle">1 kΩ</text><polyline class="w p5sig" points="280,520 220,520"/><text class="t-cap" x="310" y="556" text-anchor="middle">5V echo → 3.3V</text><polyline class="w sig" points="558,274 570,274 590,274"/><polyline class="w sig" points="590,274 597.5,268 605.0,280 612.5,268 620.0,280 627.5,268 635.0,280 642.5,268 650,274"/><text class="t-cap" x="620.0" y="261" text-anchor="middle">1 kΩ</text><polyline class="w sig" points="650,274 690,274"/><circle class="npn" cx="702" cy="274" r="22"/><line class="w sig" x1="690" y1="262" x2="690" y2="286"/><polyline class="w spk" points="690,268 710,255 710,175 770,175"/><polyline class="w gnd" points="690,280 710,293 710,300"/><path class="arrowhead" d="M710,293 l-7,-1 l3,-6 z"/><polyline class="w gnd" points="710,300 726,300"/><rect class="tag gnd" x="726" y="290" width="44" height="20" rx="10"/><text class="t-tag gnd" x="748.0" y="304" text-anchor="middle">GND</text><text class="t-pin" x="740" y="262" text-anchor="start">NPN</text><text class="t-cap" x="740" y="276" text-anchor="start">2N2222 / S8050</text><rect class="comp" x="770" y="150" width="100" height="50" rx="6"/><text class="t-title" x="820.0" y="172" text-anchor="middle">Speaker</text><rect class="pin" x="767" y="172" width="6" height="6"/><text class="t-pin" x="779" y="179" text-anchor="start">−</text><rect class="pin" x="867" y="172" width="6" height="6"/><text class="t-pin" x="861" y="179" text-anchor="end">+</text><polyline class="w p5" points="870,175 880,175"/><polyline class="w p5" points="880,175 886.25,169 892.5,181 898.75,169 905.0,181 911.25,169 917.5,181 923.75,169 930,175"/><text class="t-cap" x="905.0" y="162" text-anchor="middle">22 Ω</text><polyline class="w p5" points="930,175 946,175"/><rect class="tag p5" x="946" y="165" width="44" height="20" rx="10"/><text class="t-tag p5" x="968.0" y="179" text-anchor="middle">5V</text><text class="t-cap" x="838" y="218" text-anchor="middle">diode across speaker (stripe → +)</text><text class="t-cap" x="838" y="232" text-anchor="middle">100 µF from 5V to GND nearby</text><rect class="comp" x="780" y="345" width="140" height="150" rx="6"/><text class="t-title" x="850.0" y="367" text-anchor="middle">Joystick</text><text class="t-sub" x="850.0" y="383" text-anchor="middle">thumb, on the handle</text><text class="t-cap" x="850.0" y="511" text-anchor="middle">its “+5V” pin goes to 3.3V!</text><rect class="pin" x="777" y="397" width="6" height="6"/><text class="t-pin" x="789" y="404" text-anchor="start">SW</text><rect class="pin" x="777" y="432" width="6" height="6"/><text class="t-pin" x="789" y="439" text-anchor="start">VRy</text><rect class="pin" x="777" y="463" width="6" height="6"/><text class="t-pin" x="789" y="470" text-anchor="start">VRx</text><rect class="pin" x="917" y="397" width="6" height="6"/><text class="t-pin" x="911" y="404" text-anchor="end">+5V</text><polyline class="w p33" points="920,400 936,400"/><rect class="tag p33" x="936" y="390" width="44" height="20" rx="10"/><text class="t-tag p33" x="958.0" y="404" text-anchor="middle">3.3V</text><rect class="pin" x="917" y="437" width="6" height="6"/><text class="t-pin" x="911" y="444" text-anchor="end">GND</text><polyline class="w gnd" points="920,440 936,440"/><rect class="tag gnd" x="936" y="430" width="44" height="20" rx="10"/><text class="t-tag gnd" x="958.0" y="444" text-anchor="middle">GND</text><polyline class="w sig" points="558,322 570,322 750,322 750,400 780,400"/><polyline class="w ana" points="558,418 570,418 730,418 730,435 780,435"/><polyline class="w ana" points="558,466 570,466 780,466"/></svg></div>
+  </section>
+
+  <section class="card">
+    <header class="row"><h2>Raw serial</h2><button class="small" id="clearLog" style="margin-left:auto">Clear</button></header>
+    <div id="log" aria-label="raw serial lines"></div>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const S = { board: false, i2c: false, acc: false, us: false, joy: false, cmd: false, spk: false, oled: false, ir: false };
+const LABEL = { board: "Board", i2c: "I2C", acc: "Accelerometer", us: "Ultrasonic", joy: "Joystick", spk: "Speaker", oled: "OLED", ir: "Hole sensor" };
+let port = null, reader = null, pipeDone = null, simTimer = null, connected = false;
+const hist = [], seen = { dirs: new Set(), click: false, spare: new Set(), irVals: new Set() };
+let lastI2C = [], count = 0, rateT = performance.now(), peaks = [];
+
+function setPill(key, state, text) {
+  const el = $("s-" + key); el.className = "pill " + state; el.textContent = text;
+  if (key in S) { S[key] = state === "ok"; updateProgress(); }
+}
+function hint(id, cls, text) { const el = $(id); el.className = "hint " + cls; el.textContent = text; }
+function updateProgress() {
+  const n = Object.values(S).filter(Boolean).length, total = Object.keys(S).length;
+  $("progBar").style.width = (100 * n / total) + "%";
+  $("progText").textContent = n === total ? `All ${total} parts verified ✓  Flash smart_cane.ino next` : `${n} of ${total} parts verified`;
+}
+function notice(text) { const n = $("notice"); n.hidden = !text; n.textContent = text || ""; }
+function log(line) {
+  const el = $("log"); el.textContent += line + "\n";
+  if (el.textContent.length > 20000) el.textContent = el.textContent.slice(-15000);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ------------------------------------------------------------------ serial
+async function connect() {
+  if (!("serial" in navigator)) { notice("This browser can't talk to USB serial. Open this file in Chrome or Edge on a laptop."); return; }
+  try {
+    port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x303a }] });
+  } catch { return; } // user cancelled
+  try {
+    await port.open({ baudRate: 115200 });
+  } catch (e) {
+    notice("Couldn't open the port: " + e.message + ". Close the Arduino Serial Monitor (or any other program using it) and try again.");
+    return;
+  }
+  stopSim(); notice(""); connected = true;
+  $("connect").disabled = true; $("disconnect").disabled = false; $("howto").hidden = true;
+  $("boardState").textContent = "connected, waiting for data…";
+  const decoder = new TextDecoderStream();
+  pipeDone = port.readable.pipeTo(decoder.writable).catch(() => {});
+  reader = decoder.readable.getReader();
+  let buf = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) { handleLine(buf.slice(0, i).trim()); buf = buf.slice(i + 1); }
+    }
+  } catch (e) { notice("Connection lost: " + e.message + ". Replug the USB cable and press Connect."); }
+  await cleanup();
+}
+async function cleanup() {
+  connected = false;
+  try { reader && reader.releaseLock(); } catch {}
+  try { await pipeDone; } catch {}
+  try { port && await port.close(); } catch {}
+  port = null; reader = null;
+  $("connect").disabled = false; $("disconnect").disabled = true;
+  $("boardState").textContent = "not connected"; setPill("board", "wait", "waiting");
+}
+async function disconnect() { try { await reader.cancel(); } catch {} }
+async function send(cmd) {
+  if (simTimer) { log("> " + cmd + " (simulated)"); return; }
+  if (!port || !port.writable) { notice("Connect the cane first."); return; }
+  const w = port.writable.getWriter();
+  try { await w.write(new TextEncoder().encode(cmd + "\n")); log("> " + cmd); } finally { w.releaseLock(); }
+}
+
+// ------------------------------------------------------------------ data handling
+function handleLine(line) {
+  if (!line) return;
+  log(line);
+  if (line[0] !== "{") {
+    $("boardState").textContent = "connected, but this isn't the cane lab firmware";
+    setPill("board", "warn", "wrong firmware");
+    return;
+  }
+  let m; try { m = JSON.parse(line); } catch { return; }
+  if (m.i2c) return onI2C(m.i2c);
+  if (m.ack) return;
+  if (m.btn) return onBtn(m.btn);
+  if (m.ms !== undefined) onSample(m);
+}
+
+function onI2C(list) {
+  lastI2C = list;
+  const hex = list.map((a) => "0x" + a.toString(16).toUpperCase().padStart(2, "0"));
+  $("i2cList").textContent = hex.length ? hex.join(", ") : "nothing";
+  const adxl = list.includes(0x53), oled = list.includes(0x3c);
+  $("i2c-53").classList.toggle("on", adxl); $("i2c-3c").classList.toggle("on", oled);
+  if (adxl && oled) { setPill("i2c", "ok", "working"); hint("h-i2c", "ok", "Both parts answer on the bus."); }
+  else {
+    setPill("i2c", list.length ? "warn" : "bad", list.length ? "partly" : "nothing found");
+    const msgs = [];
+    if (!list.length) msgs.push("Nothing answers: check SDA→6, SCL→7, and 3.3V/GND to both parts.");
+    if (!adxl) msgs.push(list.includes(0x1d) ? "ADXL345 is at 0x1D: wire its SDO to GND." : "ADXL345 (0x53) missing: check its SDA/SCL, VCC→3.3, CS→3.3.");
+    if (!oled) msgs.push(list.includes(0x3d) ? "OLED is at 0x3D: firmware expects 0x3C (ask Claude to switch)." : "OLED (0x3C) missing: check its SDA/SCL and power.");
+    hint("h-i2c", "bad", msgs.join(" "));
+  }
+}
+
+function onSample(m) {
+  count++;
+  const now = performance.now();
+  if (now - rateT > 1000) { $("rate").textContent = Math.round(count * 1000 / (now - rateT)); count = 0; rateT = now; }
+  $("uptime").textContent = (m.ms / 1000).toFixed(0) + " s";
+  if (!S.board) { $("boardState").textContent = "streaming"; setPill("board", "ok", "working"); }
+
+  // accelerometer
+  if (m.acc) {
+    const tot = Math.hypot(m.ax, m.ay, m.az);
+    for (const k of ["x", "y", "z"]) {
+      const v = m["a" + k], pct = Math.max(-2, Math.min(2, v)) / 2 * 50;
+      const bar = $("b" + k); bar.style.left = (pct < 0 ? 50 + pct : 50) + "%"; bar.style.width = Math.abs(pct) + "%";
+      $("v" + k).textContent = v.toFixed(2);
+    }
+    $("vtot").textContent = tot.toFixed(2) + " g";
+    const ax = [["x", m.ax], ["y", m.ay], ["z", m.az]].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
+    $("gaxis").textContent = Math.abs(ax[1]) > 0.7 ? ax[0] + (ax[0] === "y" ? " (that's the shaft axis ✓)" : "") : "mixed (tilted)";
+    peaks.push([now, tot]); peaks = peaks.filter((p) => now - p[0] < 5000);
+    const pk = Math.max(...peaks.map((p) => p[1]));
+    $("peak").textContent = pk.toFixed(2) + " g" + (pk > 2.5 ? "  ← would trigger the fall check" : "");
+    if (tot < 0.05) { setPill("acc", "bad", "reads zero"); hint("h-acc", "bad", "All zeros: connect the ADXL345's CS pin to 3.3V."); }
+    else if (tot > 0.85 && tot < 1.15) { setPill("acc", "ok", "working"); hint("h-acc", "ok", "Gravity reads about 1 g. Tap the table to see the peak jump."); }
+    else if (!S.acc) { setPill("acc", "warn", "moving?"); hint("h-acc", "warn", "Hold the board still for a second."); }
+  } else { setPill("acc", "bad", "not found"); hint("h-acc", "bad", "No accelerometer data. See the I2C card."); }
+
+  // ultrasonic + proximity alarm
+  const d = m.d;
+  if (m.alcm !== undefined && !alarmSynced) { alarmSynced = true; $("alarmOn").checked = !!m.al; $("alarmCm").value = m.alcm; $("alarmCmV").textContent = m.alcm + " cm"; }
+  const zoneTop = 65 - (+$("alarmCm").value) / 200 * 60;
+  $("alarmZone").setAttribute("y", zoneTop.toFixed(1)); $("alarmZone").setAttribute("height", (70 - zoneTop).toFixed(1));
+  const inAlarm = $("alarmOn").checked && d > 0 && d < +$("alarmCm").value;
+  const as = $("alarmState"); as.className = "pill " + (inAlarm ? "bad" : "wait"); as.textContent = inAlarm ? (d <= 3 ? "ALARM (solid)" : "ALARM") : "quiet";
+  $("dist").textContent = d < 0 ? "–" : d;
+  hist.push([now, d]); while (hist.length && now - hist[0][0] > 10000) hist.shift();
+  const vals = hist.map((h) => h[1]).filter((v) => v > 0);
+  const pts = hist.map((h) => {
+    const x = 300 * (1 - (now - h[0]) / 10000), v = h[1] < 0 ? 200 : Math.min(h[1], 200);
+    return x.toFixed(1) + "," + (65 - v / 200 * 60).toFixed(1);
+  });
+  $("spark").setAttribute("points", pts.join(" "));
+  if (vals.length) {
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    $("drange").textContent = lo + "–" + hi + " cm";
+    if (hi - lo >= 25) { setPill("us", "ok", "working"); hint("h-us", "ok", "It follows your hand."); }
+    else if (!S.us) { setPill("us", "warn", "move hand"); hint("h-us", "warn", "Echo works. Move your hand closer and further to confirm it tracks."); }
+  } else if (hist.length > 30) { setPill("us", "bad", "no echo"); hint("h-us", "bad", "No echo for a while: check 5V on VCC, TRIG→20, ECHO→1 kΩ→21 and 21→2 kΩ→G."); }
+
+  // IR hole sensor
+  onIR(m.ir, now, m.d);
+
+  // joystick
+  const x = m.jx, y = m.jy;
+  $("jx").textContent = x; $("jy").textContent = y; $("jsw").textContent = m.sw === 0 ? "PRESSED" : "up";
+  $("knob").setAttribute("cx", (80 + (x - 2048) / 2048 * 60).toFixed(1));
+  $("knob").setAttribute("cy", (80 + (y - 2048) / 2048 * 60).toFixed(1));
+  $("knob").setAttribute("fill", m.sw === 0 ? "var(--ok)" : "var(--accent)");
+  const dir = y < 700 ? "UP" : y > 3400 ? "DOWN" : x < 700 ? "LEFT" : x > 3400 ? "RIGHT" : null;
+  for (const k of ["UP", "DOWN", "LEFT", "RIGHT"]) $("l" + k).setAttribute("fill", dir === k ? "var(--accent)" : "var(--muted)");
+  if (dir) { seen.dirs.add(dir); $("j-" + dir).classList.add("on"); }
+  if (m.sw === 0) { seen.click = true; $("j-CLICK").classList.add("on"); }
+  $("pf-3").classList.toggle("live", m.sw === 0);
+  for (const p of ["2", "5", "9"]) {
+    const low = m.p && m.p[p] === 0;
+    $("pf-" + p).classList.toggle("live", low);
+    if (low) seen.spare.add(p);
+  }
+  if (seen.dirs.size === 4 && seen.click) { setPill("joy", "ok", "working"); hint("h-joy", "ok", "All four directions and the click work."); }
+  else {
+    const missing = ["UP", "DOWN", "LEFT", "RIGHT"].filter((k) => !seen.dirs.has(k)).map((k) => k.toLowerCase());
+    let msg = missing.length ? "Push: " + missing.join(", ") + ". " : "Directions ✓. ";
+    if (!seen.click) msg += "Now press the stick straight down.";
+    if (seen.spare.size && !seen.click) {
+      const p = [...seen.spare].filter((q) => q !== "9");
+      if (p.length) { setPill("joy", "bad", "SW on wrong pin"); hint("h-joy", "bad", `Found it: the button pulls pin ${p.join(", ")} low. Move the SW wire to pin 3.`); return; }
+    }
+    setPill("joy", seen.dirs.size ? "warn" : "wait", seen.dirs.size ? "in progress" : "waiting");
+    hint("h-joy", "warn", msg);
+  }
+  if (m.sw === 0 && seen.dirs.size === 0 && x > 1000 && x < 3000) hint("h-joy", "warn", "Button reads pressed. If you're not pressing it, the SW wire is touching GND.");
+
+
+}
+
+// ------------------------------------------------------------------ IR hole sensor
+const HOLE_CONFIRM_MS = 120; // same as smart_cane.ino
+const ir = { activeLow: true, floor: null, since: 0, floorOk: false, holeOk: false, backOk: false, alarms: 0, alarmed: false };
+function onIR(raw, now, d) {
+  const floor = ir.activeLow ? raw === 0 : raw === 1;
+  if (floor !== ir.floor && ir.floor !== null) recordFlip(floor, d);
+  if (floor !== ir.floor) {
+    if (ir.floor === false) $("irLast").textContent = Math.round(now - ir.since) + " ms";
+    ir.floor = floor; ir.since = now; ir.alarmed = false;
+  }
+  const held = now - ir.since;
+  if (floor && held > 400) { ir.floorOk = true; if (ir.holeOk) ir.backOk = true; }
+  if (!floor && held > HOLE_CONFIRM_MS && !ir.alarmed) { ir.alarmed = true; ir.alarms++; if (ir.floorOk) ir.holeOk = true; }
+  const st = $("irState");
+  st.textContent = floor ? "FLOOR SEEN" : held > HOLE_CONFIRM_MS ? "NO FLOOR: hole alarm" : "no floor…";
+  st.style.color = floor ? "var(--ok)" : "var(--bad)";
+  $("irRaw").textContent = "pin 10 = " + raw + (raw ? " (HIGH)" : " (LOW)");
+  $("irFloor").setAttribute("transform", floor ? "" : "translate(0,40)");
+  $("irBeamBack").style.opacity = floor ? 1 : 0;
+  $("irHoleTxt").style.opacity = floor ? 0 : 1;
+  $("irAlarms").textContent = ir.alarms;
+  $("ir1").classList.toggle("on", ir.floorOk); $("ir2").classList.toggle("on", ir.holeOk); $("ir3").classList.toggle("on", ir.backOk);
+  if (ir.floorOk && ir.holeOk && ir.backOk) { setPill("ir", "ok", "working"); hint("h-ir", "ok", "Floor and hole both detected. Keep USE_HOLE_SENSOR 1 in smart_cane.ino."); }
+  else if (!ir.floorOk && held > 3000) { setPill("ir", "bad", "no floor seen"); hint("h-ir", "bad", "It has never seen a surface. Hold it 5–10 cm over the table and turn the screw until the module's LED lights. Check VCC→3.3, GND, OUT→pin 10. If it says FLOOR only when lifted, tick the box below."); }
+  else if (!ir.floorOk) { setPill("ir", "wait", "waiting"); hint("h-ir", "warn", "Step 1: hold the tip 5–10 cm above a table."); }
+  else if (!ir.holeOk) { setPill("ir", "warn", "in progress"); hint("h-ir", "warn", "Step 2: slide the sensor past the table edge so the floor disappears."); }
+  else { setPill("ir", "warn", "in progress"); hint("h-ir", "warn", "Step 3: bring it back over the table."); }
+}
+
+const irCal = { trips: [] };
+function recordFlip(nowFloor, d) {
+  if (!(d > 0)) return; // ultrasonic must see the floor to measure
+  if (nowFloor) { $("irBack").textContent = d + " cm"; return; }
+  $("irTrip").textContent = d + " cm";
+  irCal.trips.push(d); if (irCal.trips.length > 5) irCal.trips.shift();
+  judgeCal();
+}
+function judgeCal() {
+  const target = +$("irTarget").value;
+  if (!irCal.trips.length) { hint("h-irCal", "warn", "Lift both sensors slowly from the floor until the IR flips to NO FLOOR."); return; }
+  const avg = irCal.trips.reduce((a, b) => a + b, 0) / irCal.trips.length;
+  $("irAvg").textContent = avg.toFixed(1) + " cm (" + irCal.trips.length + " tries)";
+  if (avg < target - 2) hint("h-irCal", "bad", `Trips at ${avg.toFixed(0)} cm: too low, so normal cane lifts would set it off. Turn the screw a quarter turn to INCREASE the range, then lift again.`);
+  else if (avg > target + 2) hint("h-irCal", "bad", `Trips at ${avg.toFixed(0)} cm: too high, so shallow steps might be missed. Turn the screw a quarter turn to DECREASE the range, then lift again.`);
+  else hint("h-irCal", "ok", `Trips at ${avg.toFixed(0)} cm, right on your ${target} cm target (10–20 cm band). Leave the screw there.`);
+  if (avg > 22) hint("h-irCal", "warn", `Trips at ${avg.toFixed(0)} cm, beyond 20 cm. Turn the screw to decrease the range.`);
+}
+
+// ------------------------------------------------------------------ joystick -> app commands
+let alarmSynced = false, beSock = null;
+const cmdSeen = new Set();
+const CMD_TEXT = { describe: "describe the scene", read: "read text", ask: "listen for a question", repeat: "repeat last sentence", auto: "announcements on/off", sos: "SOS to caregiver" };
+function cmdLogLine(html) {
+  const el = $("cmdLog");
+  el.innerHTML = "<div>" + html + "</div>" + el.innerHTML.split("</div>").slice(0, 3).join("</div>");
+}
+function onBtn(b) {
+  const row = document.querySelector(`#cmdTable tr[data-b="${b}"]`);
+  if (row) {
+    const n = row.querySelector(".n"); n.textContent = +n.textContent + 1;
+    row.classList.add("seen", "flash"); setTimeout(() => row.classList.remove("flash"), 600);
+  }
+  cmdSeen.add(b);
+  const sent = beSock && beSock.readyState === 1;
+  if (sent) beSock.send(JSON.stringify(b === "sos" ? { t: "sos", reason: "SOS button held (cane lab)" } : { t: "btn", b }));
+  const t = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  cmdLogLine(`${t}  →  app: <b>${b}</b> (${CMD_TEXT[b] || b})${sent ? "  ✓ sent" : ""}`);
+  const missing = ["describe", "read", "ask", "repeat", "auto"].filter((k) => !cmdSeen.has(k));
+  if (!missing.length) { setPill("cmd", "ok", "working"); hint("h-cmd", "ok", "All five commands fire. Hold the press 3 s to try SOS."); }
+  else { setPill("cmd", "warn", "in progress"); hint("h-cmd", "warn", "Still to try: " + missing.join(", ")); }
+}
+function beToggle() {
+  if (beSock) { beSock.close(); return; }
+  const base = $("beUrl").value.trim().replace(/\/$/, "");
+  let url;
+  try { url = new URL(base); } catch { $("beState").textContent = "That address doesn't look right. Example: http://192.168.43.100:8000"; return; }
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = "/ws/device"; url.search = "?role=cane&token=";
+  $("beState").textContent = "connecting…";
+  const ws = new WebSocket(url.toString());
+  beSock = ws;
+  ws.onopen = () => { $("beState").textContent = "Forwarding ✓ The app now sees this page as the cane."; $("beConnect").textContent = "Stop"; };
+  ws.onclose = () => { if (beSock === ws) beSock = null; $("beConnect").textContent = "Connect"; if (!/Can't reach/.test($("beState").textContent)) $("beState").textContent = "not forwarding"; };
+  ws.onerror = () => { $("beState").textContent = "Can't reach the backend at " + base + ". Is uvicorn running? If the phone is on a hotspot, use the laptop's IP."; };
+  ws.onmessage = (e) => {
+    let msg; try { msg = JSON.parse(e.data); } catch { return; }
+    if (msg.t === "tone") { send(`tone ${msg.f || 1500} ${(msg.on || 80) * (msg.n || 1)}`); cmdLogLine(`app → cane: tone ${msg.f} Hz`); }
+    if (msg.t === "find") { send("beep 6"); cmdLogLine("app → cane: find my cane (beeping)"); }
+  };
+}
+
+// ------------------------------------------------------------------ simulation
+function startSim() {
+  if (connected) return;
+  stopSim(); let t = 0;
+  $("boardState").textContent = "SIMULATED (no board)"; $("howto").hidden = true;
+  onI2C([0x3c, 0x53]);
+  simTimer = setInterval(() => {
+    t += 0.05;
+    const press = Math.sin(t * 0.9) > 0.95;
+    const dd = Math.round(14 + 10 * Math.sin(t * 0.8));
+    handleLine(JSON.stringify({ ms: Math.round(t * 1000), d: dd, ir: dd > 14 ? 1 : 0,
+      jx: Math.round(2048 + 2000 * Math.cos(t * 1.3)), jy: Math.round(2048 + 2000 * Math.sin(t * 1.3)), sw: press ? 0 : 1,
+      acc: 1, ax: 0.02, ay: -0.04 + (Math.sin(t * 4) > 0.98 ? 2.4 : 0), az: 0.98, p: { 2: 1, 5: 1, 9: 1 } }));
+    if (Math.round(t * 20) % 40 === 0) handleLine(JSON.stringify({ btn: ["describe", "read", "ask", "repeat", "auto"][Math.round(t * 20 / 40) % 5] }));
+  }, 50);
+  $("simulate").textContent = "Stop simulation";
+}
+function stopSim() { if (simTimer) { clearInterval(simTimer); simTimer = null; $("simulate").textContent = "Simulate"; } }
+
+// ------------------------------------------------------------------ controls
+$("connect").onclick = connect;
+$("disconnect").onclick = disconnect;
+$("simulate").onclick = () => (simTimer ? stopSim() : startSim());
+$("irInvert").onchange = (e) => { ir.activeLow = !e.target.checked; Object.assign(ir, { floor: null, floorOk: false, holeOk: false, backOk: false, alarms: 0 }); };
+$("irTarget").oninput = () => { $("irTargetV").textContent = $("irTarget").value + " cm"; judgeCal(); };
+$("irCalReset").onclick = () => { irCal.trips = []; ["irTrip", "irBack", "irAvg"].forEach((i) => ($(i).textContent = "–")); judgeCal(); };
+$("beConnect").onclick = beToggle;
+$("alarmOn").onchange = () => send("alarm " + ($("alarmOn").checked ? 1 : 0));
+$("alarmCm").oninput = () => ($("alarmCmV").textContent = $("alarmCm").value + " cm");
+$("alarmCm").onchange = () => send("alarmcm " + $("alarmCm").value);
+$("clearLog").onclick = () => ($("log").textContent = "");
+document.querySelectorAll("[data-cmd]").forEach((b) => (b.onclick = () => send(b.dataset.cmd)));
+$("freq").oninput = () => ($("freqV").textContent = $("freq").value + " Hz");
+$("toneBtn").onclick = () => send(`tone ${$("freq").value} 600`);
+const SPK = {
+  ok: ["ok", "working", "ok", "Speaker driver works."],
+  faint: ["warn", "faint", "warn", "Faint usually means the transistor's outer legs are swapped. Unplug USB, swap the left and right legs, try again. Also check the 22 Ω goes to 5V (not 3.3)."],
+  silent: ["bad", "silent", "bad", "Check: 5V → 22 Ω → speaker +; speaker − → transistor right leg (C); left leg (E) → G; middle (B) → 1 kΩ → pin 4. Try swapping the outer legs too."],
+};
+document.querySelectorAll("[data-spk]").forEach((b) => (b.onclick = () => { const r = SPK[b.dataset.spk]; setPill("spk", r[0], r[1]); hint("h-spk", r[2], r[3]); }));
+$("oledSend").onclick = () => send("oled " + $("oledText").value);
+$("oledText").onkeydown = (e) => { if (e.key === "Enter") $("oledSend").click(); };
+document.querySelectorAll("[data-oled]").forEach((b) => (b.onclick = () => {
+  if (b.dataset.oled === "ok") { setPill("oled", "ok", "working"); hint("h-oled", "ok", "OLED works."); }
+  else { setPill("oled", "bad", "blank"); hint("h-oled", "bad", lastI2C.includes(0x3c) ? "The OLED answers on I2C but shows nothing: replug USB to restart it, or it may be a 128×32 screen (ask Claude)." : "The OLED doesn't answer on I2C: check its VCC→3.3, GND, SDA→6, SCL→7."); }
+}));
+if (navigator.serial) navigator.serial.addEventListener("disconnect", () => notice("The cane was unplugged."));
+updateProgress();
+judgeCal();
+if (location.hash === "#sim") startSim();
+</script>
+</body>
+</html>

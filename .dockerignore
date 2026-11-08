@@ -1,0 +1,5 @@
+backend/.venv
+backend/*.db
+backend/.env
+android
+firmware

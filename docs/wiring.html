@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Smart Eyes Wiring</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a datasheet. One reading column; diagrams sit in full-width scroll boxes. */
+:root {
+  --bg: #f4f6f8; --panel: #ffffff; --fg: #18212c; --muted: #5a6677; --line: #d3dae3; --accent: #1d5bd0;
+  --pcb: #e6ecf6; --pcb-line: #6f86ab; --island: #f9fbfc;
+  --w5v: #cf3434; --w33: #d9831a; --wgnd: #4b5666; --wsig: #1d6be0; --wi2c: #118a58; --wana: #8a43d4; --wspk: #b0368f;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f141a; --panel: #161d26; --fg: #e4e9ef; --muted: #95a2b3; --line: #2b3542; --accent: #73a3ff;
+  --pcb: #151f30; --pcb-line: #4d6890; --island: #131a22;
+  --w5v: #ff6b6b; --w33: #ffad4a; --wgnd: #a3aebd; --wsig: #62a6ff; --wi2c: #3ccb8c; --wana: #bb8cff; --wspk: #f07acb; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #161d26; --fg: #e4e9ef; --muted: #95a2b3; --line: #2b3542; --accent: #73a3ff;
+  --pcb: #151f30; --pcb-line: #4d6890; --island: #131a22;
+  --w5v: #ff6b6b; --w33: #ffad4a; --wgnd: #a3aebd; --wsig: #62a6ff; --wi2c: #3ccb8c; --wana: #bb8cff; --wspk: #f07acb; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--fg); font: 17px/1.55 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1020px; margin: 0 auto; padding-block: 40px 72px; display: grid; gap: 44px; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.1; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(34px, 6vw, 52px); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 30px; font-weight: 600; }
+h3 { font-size: 21px; font-weight: 600; }
+p { margin: 0; }
+section { display: grid; gap: 16px; min-width: 0; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 19px; color: var(--muted); }
+.fig { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; padding: 12px; }
+.fig svg { display: block; width: 100%; height: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font: 500 13px var(--mono); color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend i { width: 22px; height: 3px; border-radius: 2px; display: inline-block; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 640px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 13px var(--body); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+tr:last-child td { border-bottom: 0; }
+td code, p code, li code { font: 500 13.5px var(--mono); background: color-mix(in srgb, var(--accent) 10%, transparent); padding: 1px 5px; border-radius: 4px; }
+td.pinc { font: 500 14px var(--mono); white-space: nowrap; }
+.warn { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--w5v); border-radius: 4px 10px 10px 4px; padding: 16px 20px; display: grid; gap: 8px; }
+ul.notes { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; max-width: 72ch; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.two > div { min-width: 0; }
+.muted { color: var(--muted); }
+
+.board { fill: var(--pcb); stroke: var(--pcb-line); stroke-width: 2; }
+.comp { fill: var(--panel); stroke: var(--fg); stroke-width: 1.5; }
+.island { fill: var(--island); stroke: var(--line); stroke-width: 1.5; }
+.hub { fill: color-mix(in srgb, var(--accent) 8%, var(--panel)); stroke: var(--accent); stroke-width: 1.8; }
+.inner { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+.wifi { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 5 6; }
+.usb { fill: var(--muted); }
+.btn { fill: var(--panel); stroke: var(--muted); stroke-width: 1.2; }
+.chip { fill: var(--fg); }
+.ant { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.hole { fill: var(--panel); stroke: #c9a227; stroke-width: 3; }
+.t-chip { font: 500 10px var(--mono); fill: var(--muted); text-anchor: middle; }
+.t-chipw { font: 600 10px var(--mono); fill: var(--bg); text-anchor: middle; }
+.t-silk { font: 600 14px var(--mono); }
+.t-free { font: italic 400 11.5px var(--body); fill: var(--muted); }
+.npn { fill: var(--panel); stroke: var(--fg); stroke-width: 1.5; }
+.arrowhead { fill: var(--wgnd); }
+.pin { fill: var(--fg); }
+.w { fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.w.p5 { stroke: var(--w5v); } .w.p33 { stroke: var(--w33); } .w.gnd { stroke: var(--wgnd); }
+.w.sig { stroke: var(--wsig); } .w.i2c { stroke: var(--wi2c); } .w.ana { stroke: var(--wana); } .w.spk { stroke: var(--wspk); }
+.w.p5sig { stroke: var(--w5v); stroke-dasharray: 6 4; }
+.dot.i2c { fill: var(--wi2c); } .dot.sig { fill: var(--wsig); }
+.tag { fill: var(--panel); stroke-width: 2; }
+.tag.p5 { stroke: var(--w5v); } .tag.p33 { stroke: var(--w33); } .tag.gnd { stroke: var(--wgnd); }
+.flow { stroke: var(--muted); stroke-width: 2; }
+.ahead { fill: var(--muted); }
+svg text { fill: var(--fg); }
+.t-title { font: 600 15px var(--body); }
+.t-sub { font: 400 12.5px var(--body); fill: var(--muted); }
+.t-cap { font: 400 12px var(--body); fill: var(--muted); }
+.t-note { font: 400 13px var(--body); fill: var(--muted); text-anchor: middle; }
+.t-pin { font: 500 12px var(--mono); }
+.t-board { font: 700 18px var(--display); }
+.t-boardsub { font: 400 12px var(--body); fill: var(--muted); }
+.t-island { font: 500 11px var(--mono); letter-spacing: .12em; fill: var(--muted); }
+.t-tag { font: 600 11px var(--mono); }
+.t-tag.p5 { fill: var(--w5v); } .t-tag.p33 { fill: var(--w33); } .t-tag.gnd { fill: var(--wgnd); }
+</style>
+
+</head><body><div class="wrap">
+  <header style="display:grid;gap:14px">
+    <div class="eyebrow">Smart Eyes · hardware plan v3</div>
+    <h1>Smart Eyes Wiring</h1>
+    <p class="lede prose">All the hardware lives on the cane, on one ESP32-C3 SuperMini. The glasses and the phone handle seeing and speaking. The two halves only talk through the backend, over WiFi.</p>
+  </header>
+
+  <section>
+    <div class="fig"><svg viewBox="0 0 960 470" role="img" aria-label="Architecture: glasses and phone on one side, the cane on the other, joined only through the backend" style="min-width:760px"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahead" d="M0,0 L10,5 L0,10 z"/></marker></defs><rect class="wifi" x="10" y="14" width="940" height="356" rx="16"/><rect class="island" x="24" y="30" width="262" height="320" rx="12"/><text class="t-island" x="44" y="54" text-anchor="start">EYES</text><rect class="comp" x="44" y="68" width="222" height="62" rx="6"/><text class="t-title" x="155.0" y="90" text-anchor="middle">Ray-Ban Meta glasses</text><text class="t-sub" x="155.0" y="106" text-anchor="middle">camera · mic · speaker</text><line class="flow" x1="84" y1="130" x2="84" y2="192" marker-end="url(#ah)" marker-start="url(#ah)"/><text class="t-cap" x="96" y="166" text-anchor="start">Bluetooth (only link)</text><rect class="comp" x="44" y="196" width="222" height="136" rx="6"/><text class="t-title" x="155.0" y="218" text-anchor="middle">Phone app (Pixel)</text><text class="t-sub" x="155.0" y="234" text-anchor="middle">the brain</text><text class="t-note" x="155" y="254" text-anchor="middle">YOLO every frame, offline</text><text class="t-note" x="155" y="271" text-anchor="middle">announces every 5–10 s</text><text class="t-note" x="155" y="288" text-anchor="middle">Gemini when joystick asks</text><text class="t-note" x="155" y="305" text-anchor="middle">texts caregiver on SOS</text><rect class="hub" x="380" y="30" width="200" height="320" rx="12"/><text class="t-title" x="480" y="56" text-anchor="middle">Backend on Vultr</text><text class="t-sub" x="480" y="72" text-anchor="middle">the relay everything talks to</text><rect class="inner" x="398" y="92" width="164" height="50" rx="6"/><text class="t-pin" x="480" y="113" text-anchor="middle">Cane ⇄ phone relay</text><text class="t-cap" x="480" y="130" text-anchor="middle">WebSocket</text><rect class="inner" x="398" y="154" width="164" height="50" rx="6"/><text class="t-pin" x="480" y="175" text-anchor="middle">Gemini</text><text class="t-cap" x="480" y="192" text-anchor="middle">only on joystick press</text><rect class="inner" x="398" y="216" width="164" height="50" rx="6"/><text class="t-pin" x="480" y="237" text-anchor="middle">ElevenLabs</text><text class="t-cap" x="480" y="254" text-anchor="middle">natural voice</text><rect class="inner" x="398" y="278" width="164" height="50" rx="6"/><text class="t-pin" x="480" y="299" text-anchor="middle">Tiger Data</text><text class="t-cap" x="480" y="316" text-anchor="middle">memory + hazard log</text><rect class="island" x="674" y="30" width="262" height="320" rx="12"/><text class="t-island" x="694" y="54" text-anchor="start">CANE</text><rect class="comp" x="694" y="68" width="222" height="62" rx="6"/><text class="t-title" x="805.0" y="90" text-anchor="middle">ESP32-C3 SuperMini</text><text class="t-sub" x="805.0" y="106" text-anchor="middle">all the hardware</text><text class="t-note" x="805" y="162" text-anchor="middle">ultrasonic → distance beeps</text><text class="t-note" x="805" y="184" text-anchor="middle">IR → hole alarm</text><text class="t-note" x="805" y="206" text-anchor="middle">ADXL345 → fall → SOS</text><text class="t-note" x="805" y="228" text-anchor="middle">joystick → app commands</text><text class="t-note" x="805" y="250" text-anchor="middle">speaker + OLED</text><text class="t-note" x="805" y="272" text-anchor="middle">beeps work with no network</text><line class="flow" x1="286" y1="264" x2="380" y2="264" marker-end="url(#ah)" marker-start="url(#ah)"/><text class="t-cap" x="333" y="244" text-anchor="middle">HTTPS +</text><text class="t-cap" x="333" y="257" text-anchor="middle">WebSocket</text><line class="flow" x1="674" y1="200" x2="580" y2="200" marker-end="url(#ah)" marker-start="url(#ah)"/><text class="t-cap" x="627" y="168" text-anchor="middle">WiFi</text><text class="t-cap" x="627" y="181" text-anchor="middle">WebSocket</text><line class="flow" x1="480" y1="350" x2="480" y2="396" marker-end="url(#ah)"/><rect class="comp" x="380" y="400" width="200" height="56" rx="6"/><text class="t-title" x="480.0" y="422" text-anchor="middle">Dashboard</text><text class="t-sub" x="480.0" y="438" text-anchor="middle">judges · caregiver</text><line class="flow" x1="155" y1="332" x2="155" y2="396" marker-end="url(#ah)"/><rect class="comp" x="44" y="400" width="222" height="56" rx="6"/><text class="t-title" x="155.0" y="422" text-anchor="middle">Caregiver&#x27;s phone</text><text class="t-sub" x="155.0" y="438" text-anchor="middle">SMS + Google Maps link</text><text class="t-cap" x="940" y="392" text-anchor="end">dashed line = the phone&#x27;s WiFi hotspot</text></svg></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Part</th><th>Job</th><th>Works without internet?</th></tr></thead>
+      <tbody>
+        <tr><td>Cane: ultrasonic</td><td>Beeps faster and higher as obstacles get closer; solid tone under 30 cm</td><td>Yes</td></tr>
+        <tr><td>Cane: IR</td><td>Low warble when the floor disappears under the tip (hole, stairs down, curb)</td><td>Yes</td></tr>
+        <tr><td>Cane: ADXL345</td><td>Cane falls and lies still → 10 s countdown → SOS. Picking the cane up cancels it.</td><td>Countdown yes, SOS needs WiFi</td></tr>
+        <tr><td>Phone: YOLO</td><td>Runs on every frame and announces what it sees every 5–10 s. Warns instantly if something is close in front.</td><td>Yes</td></tr>
+        <tr><td>Phone: Gemini</td><td>Only when the joystick asks: describe, read text, answer a question</td><td>No</td></tr>
+        <tr><td>Phone: SOS</td><td>Texts the caregiver with a Google Maps link and shows a red alert on the dashboard</td><td>Needs cell signal</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h3>Joystick on the handle</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Move</th><th>Does</th><th>Cane beeps</th></tr></thead>
+      <tbody>
+        <tr><td>Press</td><td>Describe what's in front (Gemini)</td><td>1 short</td></tr>
+        <tr><td>Up</td><td>Read text (sign, menu, label)</td><td>2 short</td></tr>
+        <tr><td>Down</td><td>Ask a question by voice, e.g. "where's my backpack?"</td><td>3 short</td></tr>
+        <tr><td>Left</td><td>Repeat the last thing said</td><td>1 short</td></tr>
+        <tr><td>Right</td><td>Turn YOLO announcements on or off</td><td>1 short</td></tr>
+        <tr><td>Hold press 3 s</td><td>SOS right away</td><td>Siren</td></tr>
+        <tr><td>Any move during a countdown or siren</td><td>Cancel</td><td>1 long, low</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted prose">If the cane can't reach the server, a press gets a low double beep instead, so the user knows it didn't go through.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">The cane</div>
+    <h2>ESP32-C3 SuperMini wiring</h2>
+    <div class="legend">
+      <span><i style="background:var(--w5v)"></i>5 V</span><span><i style="background:var(--w33)"></i>3.3 V</span>
+      <span><i style="background:var(--wgnd)"></i>GND</span><span><i style="background:var(--wsig)"></i>digital</span>
+      <span><i style="background:var(--wana)"></i>analog</span><span><i style="background:var(--wi2c)"></i>I2C</span>
+      <span><i style="background:var(--wspk)"></i>speaker drive</span>
+    </div>
+    <div class="fig"><svg viewBox="0 0 1000 620" role="img" aria-label="Wiring diagram for the Smart Eyes cane on an ESP32-C3 SuperMini, drawn with the board&#x27;s real pin order" style="min-width:760px"><text class="t-board" x="500.0" y="22" text-anchor="middle">ESP32-C3 SuperMini</text><text class="t-boardsub" x="500.0" y="38" text-anchor="middle">top view · USB-C up · pin labels as printed</text><rect class="board" x="430" y="64" width="140" height="452" rx="8"/><rect class="usb" x="470" y="52" width="60" height="34" rx="5"/><text class="t-chipw" x="500.0" y="74" text-anchor="middle">USB-C</text><rect class="btn" x="468" y="100" width="24" height="16" rx="3"/><text class="t-chip" x="480" y="128" text-anchor="middle">BOOT</text><rect class="btn" x="508" y="100" width="24" height="16" rx="3"/><text class="t-chip" x="520" y="128" text-anchor="middle">RST</text><rect class="chip" x="474" y="274" width="52" height="52" rx="4" transform="rotate(45 500 300)"/><text class="t-chipw" x="500" y="304" text-anchor="middle">C3</text><rect class="ant" x="464" y="476" width="72" height="22" rx="3"/><text class="t-chip" x="500" y="491" text-anchor="middle">antenna</text><circle class="hole" cx="442" cy="130" r="6"/><text class="t-silk" x="454" y="135" text-anchor="start">5</text><circle class="hole" cx="442" cy="178" r="6"/><text class="t-silk" x="454" y="183" text-anchor="start">6</text><circle class="hole" cx="442" cy="226" r="6"/><text class="t-silk" x="454" y="231" text-anchor="start">7</text><circle class="hole" cx="442" cy="274" r="6"/><text class="t-silk" x="454" y="279" text-anchor="start">8</text><circle class="hole" cx="442" cy="322" r="6"/><text class="t-silk" x="454" y="327" text-anchor="start">9</text><circle class="hole" cx="442" cy="370" r="6"/><text class="t-silk" x="454" y="375" text-anchor="start">10</text><circle class="hole" cx="442" cy="418" r="6"/><text class="t-silk" x="454" y="423" text-anchor="start">20</text><circle class="hole" cx="442" cy="466" r="6"/><text class="t-silk" x="454" y="471" text-anchor="start">21</text><circle class="hole" cx="558" cy="130" r="6"/><text class="t-silk" x="546" y="135" text-anchor="end">5V</text><circle class="hole" cx="558" cy="178" r="6"/><text class="t-silk" x="546" y="183" text-anchor="end">G</text><circle class="hole" cx="558" cy="226" r="6"/><text class="t-silk" x="546" y="231" text-anchor="end">3.3</text><circle class="hole" cx="558" cy="274" r="6"/><text class="t-silk" x="546" y="279" text-anchor="end">4</text><circle class="hole" cx="558" cy="322" r="6"/><text class="t-silk" x="546" y="327" text-anchor="end">3</text><circle class="hole" cx="558" cy="370" r="6"/><text class="t-silk" x="546" y="375" text-anchor="end">2</text><circle class="hole" cx="558" cy="418" r="6"/><text class="t-silk" x="546" y="423" text-anchor="end">1</text><circle class="hole" cx="558" cy="466" r="6"/><text class="t-silk" x="546" y="471" text-anchor="end">0</text><text class="t-free" x="420" y="134" text-anchor="end">free</text><text class="t-free" x="420" y="278" text-anchor="end">blue LED: leave free</text><text class="t-free" x="420" y="326" text-anchor="end">BOOT: leave free</text><text class="t-free" x="580" y="374" text-anchor="start">boot pin: leave free</text><polyline class="w p5" points="558,130 570,130"/><polyline class="w p5" points="570,130 586,130"/><rect class="tag p5" x="586" y="120" width="44" height="20" rx="10"/><text class="t-tag p5" x="608.0" y="134" text-anchor="middle">5V</text><polyline class="w gnd" points="558,178 570,178"/><polyline class="w gnd" points="570,178 586,178"/><rect class="tag gnd" x="586" y="168" width="44" height="20" rx="10"/><text class="t-tag gnd" x="608.0" y="182" text-anchor="middle">GND</text><polyline class="w p33" points="558,226 570,226"/><polyline class="w p33" points="570,226 586,226"/><rect class="tag p33" x="586" y="216" width="44" height="20" rx="10"/><text class="t-tag p33" x="608.0" y="230" text-anchor="middle">3.3V</text><rect class="comp" x="80" y="30" width="140" height="125" rx="6"/><text class="t-title" x="150.0" y="52" text-anchor="middle">ADXL345</text><text class="t-sub" x="150.0" y="68" text-anchor="middle">accelerometer</text><text class="t-cap" x="150.0" y="171" text-anchor="middle">Y arrow along the shaft</text><rect class="pin" x="217" y="92" width="6" height="6"/><text class="t-pin" x="211" y="99" text-anchor="end">SDA</text><rect class="pin" x="217" y="122" width="6" height="6"/><text class="t-pin" x="211" y="129" text-anchor="end">SCL</text><rect class="pin" x="77" y="82" width="6" height="6"/><text class="t-pin" x="89" y="89" text-anchor="start">VCC</text><polyline class="w p33" points="80,85 64,85"/><rect class="tag p33" x="20" y="75" width="44" height="20" rx="10"/><text class="t-tag p33" x="42.0" y="89" text-anchor="middle">3.3V</text><rect class="pin" x="77" y="100" width="6" height="6"/><text class="t-pin" x="89" y="107" text-anchor="start">GND</text><polyline class="w gnd" points="80,103 64,103"/><rect class="tag gnd" x="20" y="93" width="44" height="20" rx="10"/><text class="t-tag gnd" x="42.0" y="107" text-anchor="middle">GND</text><rect class="pin" x="77" y="118" width="6" height="6"/><text class="t-pin" x="89" y="125" text-anchor="start">CS</text><polyline class="w p33" points="80,121 64,121"/><rect class="tag p33" x="20" y="111" width="44" height="20" rx="10"/><text class="t-tag p33" x="42.0" y="125" text-anchor="middle">3.3V</text><rect class="pin" x="77" y="136" width="6" height="6"/><text class="t-pin" x="89" y="143" text-anchor="start">SDO</text><polyline class="w gnd" points="80,139 64,139"/><rect class="tag gnd" x="20" y="129" width="44" height="20" rx="10"/><text class="t-tag gnd" x="42.0" y="143" text-anchor="middle">GND</text><rect class="comp" x="80" y="190" width="140" height="90" rx="6"/><text class="t-title" x="150.0" y="212" text-anchor="middle">OLED SSD1306</text><text class="t-sub" x="150.0" y="228" text-anchor="middle">128×64</text><rect class="pin" x="217" y="242" width="6" height="6"/><text class="t-pin" x="211" y="249" text-anchor="end">SDA</text><rect class="pin" x="217" y="262" width="6" height="6"/><text class="t-pin" x="211" y="269" text-anchor="end">SCL</text><rect class="pin" x="77" y="242" width="6" height="6"/><text class="t-pin" x="89" y="249" text-anchor="start">VCC</text><polyline class="w p33" points="80,245 64,245"/><rect class="tag p33" x="20" y="235" width="44" height="20" rx="10"/><text class="t-tag p33" x="42.0" y="249" text-anchor="middle">3.3V</text><rect class="pin" x="77" y="262" width="6" height="6"/><text class="t-pin" x="89" y="269" text-anchor="start">GND</text><polyline class="w gnd" points="80,265 64,265"/><rect class="tag gnd" x="20" y="255" width="44" height="20" rx="10"/><text class="t-tag gnd" x="42.0" y="269" text-anchor="middle">GND</text><polyline class="w i2c" points="442,178 430,178 320,178"/><polyline class="w i2c" points="320,95 320,245"/><polyline class="w i2c" points="320,95 220,95"/><path class="w i2c" d="M320 245 H296 A6 6 0 0 0 284 245 H220"/><circle class="dot i2c" cx="320" cy="178" r="4"/><polyline class="w i2c" points="442,226 430,226"/><path class="w i2c" d="M430 226 H326 A6 6 0 0 0 314 226 H290"/><polyline class="w i2c" points="290,125 290,265 220,265"/><polyline class="w i2c" points="290,125 220,125"/><circle class="dot i2c" cx="290" cy="226" r="4"/><rect class="comp" x="80" y="335" width="140" height="66" rx="6"/><text class="t-title" x="150.0" y="357" text-anchor="middle">IR sensor</text><text class="t-cap" x="150.0" y="417" text-anchor="middle">at the tip, pointing DOWN</text><rect class="pin" x="217" y="367" width="6" height="6"/><text class="t-pin" x="211" y="374" text-anchor="end">OUT</text><rect class="pin" x="77" y="357" width="6" height="6"/><text class="t-pin" x="89" y="364" text-anchor="start">VCC</text><polyline class="w p33" points="80,360 64,360"/><rect class="tag p33" x="20" y="350" width="44" height="20" rx="10"/><text class="t-tag p33" x="42.0" y="364" text-anchor="middle">3.3V</text><rect class="pin" x="77" y="381" width="6" height="6"/><text class="t-pin" x="89" y="388" text-anchor="start">GND</text><polyline class="w gnd" points="80,384 64,384"/><rect class="tag gnd" x="20" y="374" width="44" height="20" rx="10"/><text class="t-tag gnd" x="42.0" y="388" text-anchor="middle">GND</text><polyline class="w sig" points="442,370 430,370 220,370"/><rect class="comp" x="80" y="440" width="140" height="110" rx="6"/><text class="t-title" x="150.0" y="462" text-anchor="middle">HC-SR04</text><text class="t-sub" x="150.0" y="478" text-anchor="middle">ultrasonic</text><text class="t-cap" x="150.0" y="566" text-anchor="middle">on the shaft, facing forward</text><rect class="pin" x="217" y="467" width="6" height="6"/><text class="t-pin" x="211" y="474" text-anchor="end">TRIG</text><rect class="pin" x="217" y="517" width="6" height="6"/><text class="t-pin" x="211" y="524" text-anchor="end">ECHO</text><rect class="pin" x="77" y="477" width="6" height="6"/><text class="t-pin" x="89" y="484" text-anchor="start">VCC</text><polyline class="w p5" points="80,480 64,480"/><rect class="tag p5" x="20" y="470" width="44" height="20" rx="10"/><text class="t-tag p5" x="42.0" y="484" text-anchor="middle">5V</text><rect class="pin" x="77" y="517" width="6" height="6"/><text class="t-pin" x="89" y="524" text-anchor="start">GND</text><polyline class="w gnd" points="80,520 64,520"/><rect class="tag gnd" x="20" y="510" width="44" height="20" rx="10"/><text class="t-tag gnd" x="42.0" y="524" text-anchor="middle">GND</text><polyline class="w sig" points="442,418 430,418 370,418 370,470 220,470"/><polyline class="w sig" points="442,466 430,466 400,466 400,520"/><circle class="dot sig" cx="400" cy="520" r="4"/><polyline class="w sig" points="400,520 400,532"/><polyline class="w sig" points="400,532 394,537.0 406,542.0 394,547.0 406,552.0 394,557.0 406,562.0 394,567.0 400,572"/><text class="t-cap" x="412" y="556.0" text-anchor="start">2 kΩ</text><polyline class="w gnd" points="400,572 400,588"/><rect class="tag gnd" x="378.0" y="588" width="44" height="20" rx="10"/><text class="t-tag gnd" x="400.0" y="602" text-anchor="middle">GND</text><polyline class="w sig" points="400,520 340,520"/><polyline class="w p5sig" points="280,520 287.5,514 295.0,526 302.5,514 310.0,526 317.5,514 325.0,526 332.5,514 340,520"/><text class="t-cap" x="310.0" y="540" text-anchor="middle">1 kΩ</text><polyline class="w p5sig" points="280,520 220,520"/><text class="t-cap" x="310" y="556" text-anchor="middle">5V echo → 3.3V</text><polyline class="w sig" points="558,274 570,274 590,274"/><polyline class="w sig" points="590,274 597.5,268 605.0,280 612.5,268 620.0,280 627.5,268 635.0,280 642.5,268 650,274"/><text class="t-cap" x="620.0" y="261" text-anchor="middle">1 kΩ</text><polyline class="w sig" points="650,274 690,274"/><circle class="npn" cx="702" cy="274" r="22"/><line class="w sig" x1="690" y1="262" x2="690" y2="286"/><polyline class="w spk" points="690,268 710,255 710,175 770,175"/><polyline class="w gnd" points="690,280 710,293 710,300"/><path class="arrowhead" d="M710,293 l-7,-1 l3,-6 z"/><polyline class="w gnd" points="710,300 726,300"/><rect class="tag gnd" x="726" y="290" width="44" height="20" rx="10"/><text class="t-tag gnd" x="748.0" y="304" text-anchor="middle">GND</text><text class="t-pin" x="740" y="262" text-anchor="start">NPN</text><text class="t-cap" x="740" y="276" text-anchor="start">2N2222 / S8050</text><rect class="comp" x="770" y="150" width="100" height="50" rx="6"/><text class="t-title" x="820.0" y="172" text-anchor="middle">Speaker</text><rect class="pin" x="767" y="172" width="6" height="6"/><text class="t-pin" x="779" y="179" text-anchor="start">−</text><rect class="pin" x="867" y="172" width="6" height="6"/><text class="t-pin" x="861" y="179" text-anchor="end">+</text><polyline class="w p5" points="870,175 880,175"/><polyline class="w p5" points="880,175 886.25,169 892.5,181 898.75,169 905.0,181 911.25,169 917.5,181 923.75,169 930,175"/><text class="t-cap" x="905.0" y="162" text-anchor="middle">22 Ω</text><polyline class="w p5" points="930,175 946,175"/><rect class="tag p5" x="946" y="165" width="44" height="20" rx="10"/><text class="t-tag p5" x="968.0" y="179" text-anchor="middle">5V</text><text class="t-cap" x="838" y="218" text-anchor="middle">diode across speaker (stripe → +)</text><text class="t-cap" x="838" y="232" text-anchor="middle">100 µF from 5V to GND nearby</text><rect class="comp" x="780" y="345" width="140" height="150" rx="6"/><text class="t-title" x="850.0" y="367" text-anchor="middle">Joystick</text><text class="t-sub" x="850.0" y="383" text-anchor="middle">thumb, on the handle</text><text class="t-cap" x="850.0" y="511" text-anchor="middle">its “+5V” pin goes to 3.3V!</text><rect class="pin" x="777" y="397" width="6" height="6"/><text class="t-pin" x="789" y="404" text-anchor="start">SW</text><rect class="pin" x="777" y="432" width="6" height="6"/><text class="t-pin" x="789" y="439" text-anchor="start">VRy</text><rect class="pin" x="777" y="463" width="6" height="6"/><text class="t-pin" x="789" y="470" text-anchor="start">VRx</text><rect class="pin" x="917" y="397" width="6" height="6"/><text class="t-pin" x="911" y="404" text-anchor="end">+5V</text><polyline class="w p33" points="920,400 936,400"/><rect class="tag p33" x="936" y="390" width="44" height="20" rx="10"/><text class="t-tag p33" x="958.0" y="404" text-anchor="middle">3.3V</text><rect class="pin" x="917" y="437" width="6" height="6"/><text class="t-pin" x="911" y="444" text-anchor="end">GND</text><polyline class="w gnd" points="920,440 936,440"/><rect class="tag gnd" x="936" y="430" width="44" height="20" rx="10"/><text class="t-tag gnd" x="958.0" y="444" text-anchor="middle">GND</text><polyline class="w sig" points="558,322 570,322 750,322 750,400 780,400"/><polyline class="w ana" points="558,418 570,418 730,418 730,435 780,435"/><polyline class="w ana" points="558,466 570,466 780,466"/></svg></div>
+    <p class="muted prose">The board is drawn as it looks from the top with the USB-C port up, and the pin numbers match what is printed on it. A rounded tag such as <code>5V</code>, <code>3.3V</code> or <code>GND</code> means "connect to that pin on the right header" (printed <code>5V</code>, <code>3.3</code>, <code>G</code>). Every GND is joined together.</p>
+
+    <div class="warn prose">
+      <strong>Two rules that protect the board</strong>
+      <p>1. Never put 5 V into a GPIO. The HC-SR04's ECHO pin outputs 5 V, so it goes through the 1 kΩ + 2 kΩ divider. Power the joystick, IR, ADXL345 and OLED from <code>3.3</code>, not <code>5V</code>.</p>
+      <p>2. Never wire the speaker straight to a GPIO. A 4–8 Ω speaker would pull about 400 mA and burn the pin, which can supply about 40 mA. The transistor does the heavy lifting.</p>
+    </div>
+
+    <div class="two">
+      <div class="tablewrap"><table style="min-width:0">
+        <thead><tr><th colspan="2">Left header, top to bottom</th></tr></thead>
+        <tbody>
+          <tr><td class="pinc">5</td><td class="muted">free</td></tr>
+          <tr><td class="pinc">6</td><td>SDA of ADXL345 + OLED</td></tr>
+          <tr><td class="pinc">7</td><td>SCL of ADXL345 + OLED</td></tr>
+          <tr><td class="pinc">8</td><td class="muted">blue LED, leave free</td></tr>
+          <tr><td class="pinc">9</td><td class="muted">BOOT button, leave free</td></tr>
+          <tr><td class="pinc">10</td><td>IR sensor OUT</td></tr>
+          <tr><td class="pinc">20</td><td>HC-SR04 TRIG</td></tr>
+          <tr><td class="pinc">21</td><td>HC-SR04 ECHO through 1 kΩ, plus 2 kΩ from 21 to GND</td></tr>
+        </tbody>
+      </table></div>
+      <div class="tablewrap"><table style="min-width:0">
+        <thead><tr><th colspan="2">Right header, top to bottom</th></tr></thead>
+        <tbody>
+          <tr><td class="pinc">5V</td><td>HC-SR04 VCC, speaker (via 22 Ω), 100 µF +</td></tr>
+          <tr><td class="pinc">G</td><td>every GND</td></tr>
+          <tr><td class="pinc">3.3</td><td>ADXL345 VCC + CS, OLED, IR, joystick “+5V”</td></tr>
+          <tr><td class="pinc">4</td><td>speaker: 1 kΩ → NPN base</td></tr>
+          <tr><td class="pinc">3</td><td>joystick SW</td></tr>
+          <tr><td class="pinc">2</td><td class="muted">boot pin, leave free</td></tr>
+          <tr><td class="pinc">1</td><td>joystick VRy</td></tr>
+          <tr><td class="pinc">0</td><td>joystick VRx</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Part</th><th>Where it goes on the cane</th></tr></thead>
+      <tbody>
+        <tr><td>HC-SR04</td><td>On the shaft at about knee height, facing forward</td></tr>
+        <tr><td>IR sensor</td><td>5–10 cm above the tip, pointing at the floor. Turn its pot until the LED is on over the floor and off over a table edge.</td></tr>
+        <tr><td>Joystick</td><td>Under your thumb on the handle. If directions come out rotated, swap them in <code>pollJoystick()</code>.</td></tr>
+        <tr><td>ADXL345</td><td>Y arrow along the shaft (or change <code>CANE_AXIS</code>)</td></tr>
+        <tr><td>OLED</td><td>On the handle, facing up, so judges can read it</td></tr>
+        <tr><td>Board, speaker, power bank</td><td>Taped near the handle, with the speaker facing up or out</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h3>Parts beyond what you have</h3>
+    <div class="two">
+      <div><ul class="notes">
+        <li><strong>Resistors:</strong> 1 kΩ ×2, 2 kΩ ×1 (or two 1 kΩ in series), 22 Ω ×1. A 10 kΩ + 20 kΩ pair also works for the divider.</li>
+        <li><strong>NPN transistor:</strong> 2N2222, S8050 or PN2222.</li>
+        <li><strong>Diode:</strong> 1N4148 or 1N4007.</li>
+        <li><strong>Capacitor:</strong> 100 µF (any voltage of 10 V or more).</li>
+      </ul></div>
+      <div><ul class="notes">
+        <li><strong>Easier speaker option:</strong> a PAM8403 amp module (about $1). Wire GPIO4→L-IN, G→GND, 5V→VCC, speaker→L+/L−. Then skip the transistor parts.</li>
+        <li><strong>No resistors for the divider?</strong> Some newer HC-SR04 boards (HC-SR04P, RCWL-9610) run on 3.3 V. Power them from 3.3 and connect ECHO directly.</li>
+        <li><strong>Power:</strong> a USB power bank into the SuperMini's USB-C. Its 5V pin then feeds the HC-SR04 and the speaker.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h3>Bring-up order</h3>
+    <ul class="notes">
+      <li>Flash with <strong>USB CDC On Boot: Enabled</strong> and open the Serial Monitor at 115200.</li>
+      <li>Wire and test one part at a time: speaker, then ultrasonic, IR, joystick, ADXL345, OLED. Use <code>firmware/hardware_test</code>: type one letter in the Serial Monitor to test each part.</li>
+      <li>Set <code>WIFI_SSID</code>, <code>WIFI_PASS</code> and <code>BACKEND_HOST</code>. The blue on-board LED lights when the cane reaches the server.</li>
+      <li>Fall test: lay the cane flat on the floor with a thump. It should wait about 4 s, count down for 10 s, then send an SOS. Picking it up cancels.</li>
+    </ul>
+  </section>
+</div>
+
+</body></html>

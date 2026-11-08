@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Eyes Live</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #171b22; --line: #262c36; --text: #e8ecf1; --muted: #8b95a5;
+    --accent: #4c9aff; --warn: #ff9f43; --danger: #ff5c5c; --ok: #3ecf8e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  .pill { font-size: 12px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+  .pill.off { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+  main { display: grid; gap: 16px; padding: 16px 20px; grid-template-columns: 1.2fr 1fr 1fr; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  #frame { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 8px; background: #000; display: block; }
+  #said { font-size: 22px; margin: 14px 0 4px; min-height: 1.4em; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .meter { height: 18px; background: #0b0d11; border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
+  .meter > div { height: 100%; width: 0; background: var(--ok); transition: width .15s, background .15s; }
+  .big { font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+  .stat { background: #0b0d11; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  #feed { list-style: none; margin: 0; padding: 0; max-height: 560px; overflow-y: auto; }
+  #feed li { padding: 9px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 64px 1fr; gap: 8px; }
+  #feed time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 2px; }
+  .tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 4px; margin-right: 6px; text-transform: uppercase; }
+  .t-hazard { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+  .t-cane { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+  .t-sos, .t-fall { background: color-mix(in srgb, var(--danger) 25%, transparent); color: var(--danger); }
+  .t-seen { background: #262c36; color: var(--muted); }
+  .t-memory, .t-sky, .t-joystick { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
+  .t-status { background: #262c36; color: var(--muted); }
+  #sos a { color: #fff; }
+  #sos { display: none; background: var(--danger); color: #fff; padding: 14px 20px; font-size: 18px; font-weight: 700; }
+  #sos.show { display: block; animation: pulse 1s infinite alternate; }
+  @keyframes pulse { from { opacity: 1; } to { opacity: .7; } }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div id="sos" role="alert"></div>
+<header>
+  <h1>Smart Eyes · Live</h1>
+  <span id="conn" class="pill off">dashboard offline</span>
+  <span id="cane" class="pill">cane: unknown</span>
+  <span id="phone" class="pill">phone: unknown</span>
+  <span id="glasses" class="pill">glasses: unknown</span>
+  <span id="auto" class="pill">announce: ?</span>
+  <span id="dbname" class="pill">db: …</span>
+</header>
+<main>
+  <section class="card">
+    <h2>What the glasses see</h2>
+    <img id="frame" alt="Latest frame from the glasses">
+    <div id="said" aria-live="polite">Waiting for the first description…</div>
+    <div class="sub" id="saidMeta"></div>
+  </section>
+
+  <section class="card">
+    <h2>Cane distance</h2>
+    <div class="big"><span id="dist">–</span><span class="sub"> cm</span></div>
+    <div class="meter" aria-hidden="true"><div id="distBar"></div></div>
+    <div class="sub" style="margin-top:6px">The cane beeps faster and higher as this bar fills. <b id="hole" style="color:var(--danger)"></b></div>
+    <div class="stats">
+      <div class="stat"><b id="nHaz">0</b><span>hazards warned</span></div>
+      <div class="stat"><b id="nCane">0</b><span>cane alerts</span></div>
+      <div class="stat"><b id="nSeen">0</b><span>scenes logged</span></div>
+    </div>
+    <h2 style="margin-top:20px">Measured latency (median)</h2>
+    <table>
+      <thead><tr><th>Path</th><th class="num">ms</th><th class="num">samples</th></tr></thead>
+      <tbody id="lat"></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Live log</h2>
+    <ul id="feed"></ul>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const counts = { hazard: 0, cane: 0, seen: 0 };
+const latencies = {};
+
+function fmtTime(ts) {
+  const d = ts ? new Date(ts) : new Date();
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+function addFeed(tag, text, ts, prepend = true) {
+  const li = document.createElement("li");
+  li.innerHTML = `<time></time><div><span class="tag t-${tag}"></span><span class="msg"></span></div>`;
+  li.querySelector("time").textContent = fmtTime(ts);
+  li.querySelector(".tag").textContent = tag;
+  li.querySelector(".msg").textContent = text;
+  const feed = $("feed");
+  prepend ? feed.prepend(li) : feed.append(li);
+  while (feed.children.length > 200) feed.lastChild.remove();
+}
+function recordLatency(path, ms) {
+  if (ms == null) return;
+  (latencies[path] ||= []).push(ms);
+  if (latencies[path].length > 50) latencies[path].shift();
+  const rows = Object.entries(latencies).map(([k, v]) => {
+    const s = [...v].sort((a, b) => a - b);
+    return `<tr><td>${k}</td><td class="num">${Math.round(s[Math.floor(s.length / 2)])}</td><td class="num">${v.length}</td></tr>`;
+  });
+  $("lat").innerHTML = rows.join("");
+}
+function setCount(k) { $({ hazard: "nHaz", cane: "nCane", seen: "nSeen" }[k]).textContent = counts[k]; }
+function setDistance(cm) {
+  $("dist").textContent = cm == null || cm < 0 ? "–" : Math.round(cm);
+  const pct = cm == null || cm < 0 ? 0 : Math.max(0, Math.min(100, 100 - (cm / 200) * 100));
+  const bar = $("distBar");
+  bar.style.width = pct + "%";
+  bar.style.background = cm < 50 ? "var(--danger)" : cm < 100 ? "var(--warn)" : "var(--ok)";
+}
+function setPill(id, label, on) {
+  const el = $(id); el.textContent = label; el.className = "pill " + (on ? "on" : "off");
+}
+
+function describeEvent(e) {
+  const where = e.direction ? ` (${e.direction})` : "";
+  const dist = e.distance_cm != null ? ` ${Math.round(e.distance_cm)} cm` : "";
+  return `${e.label || e.kind}${where}${dist}${e.source ? " · " + e.source : ""}`;
+}
+function handleEvent(e, live = true) {
+  const kind = e.kind;
+  if (kind === "hazard") { counts.hazard++; setCount("hazard"); }
+  if (kind === "cane") { counts.cane++; setCount("cane"); }
+  if (live && e.latency_ms != null) recordLatency(`${kind} · ${e.source || "?"}`, e.latency_ms);
+  if ((kind === "sos" || kind === "fall") && live) {
+    const banner = $("sos");
+    banner.textContent = (kind === "sos" ? "SOS: " : "CANE DOWN, counting down: ") + (e.label || "") + " · " + fmtTime(e.ts) + " ";
+    if (e.lat != null) {
+      const a = document.createElement("a");
+      a.href = `https://maps.google.com/?q=${e.lat},${e.lon}`; a.target = "_blank"; a.rel = "noopener";
+      a.textContent = "open map";
+      banner.append(a);
+    }
+    banner.classList.add("show");
+  }
+  addFeed(kind, describeEvent(e), e.ts, live);
+}
+
+function connect() {
+  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onopen = () => setPill("conn", "dashboard live", true);
+  ws.onclose = () => { setPill("conn", "dashboard offline", false); setTimeout(connect, 1500); };
+  ws.onmessage = (msg) => {
+    const m = JSON.parse(msg.data);
+    if (m.type === "hello") $("dbname").textContent = "db: " + m.db + (m.gemini ? "" : " · MOCK Gemini");
+    if (m.type === "sighting") {
+      counts.seen++; setCount("seen");
+      $("said").textContent = m.data.description;
+      $("saidMeta").textContent = `${m.data.mode} · Gemini ${m.latency_ms} ms · ${fmtTime(m.data.ts)}`;
+      $("frame").src = "/api/latest.jpg?t=" + Date.now();
+      recordLatency(`gemini · ${m.data.mode}`, m.latency_ms);
+      if (m.data.mode !== "scan") addFeed("seen", m.data.description, m.data.ts);
+    }
+    if (m.type === "event") handleEvent(m.data);
+    if (m.type === "memory") { addFeed("memory", `"${m.question}" → ${m.answer}`); recordLatency("memory", m.latency_ms); }
+    if (m.type === "sky") addFeed("sky", m.data.text);
+    if (m.type === "button") addFeed("joystick", m.data.b, m.data.ts);
+    if (m.type === "live") {
+      const d = m.data;
+      if ("distance_cm" in d) setDistance(d.distance_cm);
+      if ("cane_connected" in d) setPill("cane", d.cane_connected ? "cane: online" : "cane: offline", d.cane_connected);
+      if ("phone_connected" in d) setPill("phone", d.phone_connected ? "phone: online" : "phone: offline", d.phone_connected);
+      if ("hole" in d) $("hole").textContent = d.hole ? "HOLE / DROP-OFF under the tip" : "";
+      if ("auto" in d && d.auto != null) setPill("auto", d.auto ? "announce: on" : "announce: off", d.auto);
+      if ("glasses" in d) setPill("glasses", "glasses: " + d.glasses, d.glasses === "streaming");
+      if (d.latency) for (const [k, v] of Object.entries(d.latency)) recordLatency(k, v);
+    }
+  };
+  setInterval(() => ws.readyState === 1 && ws.send("ping"), 20000);
+}
+
+$("sos").onclick = () => $("sos").classList.remove("show");
+fetch("/api/events?limit=60").then((r) => r.json()).then((rows) => rows.forEach((e) => handleEvent(e, false))).catch(() => {});
+fetch("/api/latest.jpg").then((r) => { if (r.ok) $("frame").src = "/api/latest.jpg?t=" + Date.now(); });
+connect();
+</script>
+</body>
+</html>

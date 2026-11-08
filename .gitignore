@@ -1,0 +1,19 @@
+backend/.env
+backend/.venv/
+backend/*.db
+__pycache__/
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/.idea/
+*.iml
+.DS_Store
+android/app/build/
+android/.kotlin/
+firmware/*/build/
+
+# build outputs (the APK is ~84 MB; share it via the zip or a GitHub release)
+dist/*.apk
+android/app/release/
+*.log

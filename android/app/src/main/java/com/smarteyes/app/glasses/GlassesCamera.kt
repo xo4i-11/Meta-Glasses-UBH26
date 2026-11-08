@@ -57,9 +57,11 @@ class GlassesCamera(private val context: Context, private val scope: CoroutineSc
   private var wanted = false
   private var retryJob: Job? = null
   private var attempts = 0
+  private var watchdog: Job? = null
 
   fun start() {
     wanted = true
+    startWatchdog()
     retryJob?.cancel()
     retryJob = null
     if (session != null) return
@@ -73,7 +75,7 @@ class GlassesCamera(private val context: Context, private val scope: CoroutineSc
                 s.state.collect { st ->
                   Log.i(TAG, "session $st")
                   if (st == DeviceSessionState.STARTED) ensureCamera(s)
-                  if (st == DeviceSessionState.STOPPED && camera != null) cleanup("glasses disconnected")
+                  if (st == DeviceSessionState.STOPPED && camera != null) reconnect("glasses disconnected, reconnecting")
                 }
               }
           s.start()
@@ -140,8 +142,30 @@ class GlassesCamera(private val context: Context, private val scope: CoroutineSc
         }
       }
 
+  /** Glasses taken off, asleep or a Bluetooth drop: tear down and open a new session in 3 s. */
+  private fun reconnect(reason: String) {
+    Log.w(TAG, reason)
+    camera?.stop()
+    session?.stop()
+    cleanup(reason)
+    if (wanted) retryJob = scope.launch { delay(3000); if (wanted && session == null) start() }
+  }
+
+  /** Session can die silently (no STOPPED): no frame for 8 s while streaming -> reconnect. */
+  private fun startWatchdog() {
+    if (watchdog?.isActive == true) return
+    watchdog = scope.launch {
+      while (true) {
+        delay(4000)
+        val idle = SystemClock.elapsedRealtime() - lastFrameAt
+        if (wanted && camera != null && lastFrameAt > 0 && idle > 8000) reconnect("no video for ${idle / 1000} s, reconnecting")
+      }
+    }
+  }
+
   fun stop() {
     wanted = false
+    watchdog?.cancel()
     retryJob?.cancel()
     camera?.stop()
     session?.stop()
@@ -154,6 +178,7 @@ class GlassesCamera(private val context: Context, private val scope: CoroutineSc
     camera = null
     stream = null
     session = null
+    lastFrameAt = 0
     _state.value = reason
   }
 
